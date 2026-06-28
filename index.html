@@ -1669,8 +1669,7 @@ function SettingsPanel({settings,theme,onSave,onClose}){
     <div style={{background:theme.panel,border:`1px solid ${theme.border}`,borderRadius:10,padding:14}}>
       <SectionHeader title="Settings" accent={theme.accent} action={<button onClick={onClose} style={{background:"none",border:"none",color:theme.muted,cursor:"pointer",fontSize:"1rem"}}>✕</button>}/>
       <Inp label="Your Name" value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Tony"/>
-      <Inp label="Anthropic API Key (for Assistant chat)" type="password" value={form.apiKey||""} onChange={e=>setForm({...form,apiKey:e.target.value})} placeholder="sk-ant-..."/>
-      <div style={{fontSize:"0.68rem",color:"#64748b",marginBottom:12,marginTop:-8}}>Get a free key at console.anthropic.com — stored locally only, never sent anywhere except Anthropic.</div>
+
       <div style={{marginBottom:12}}>
         <label style={{display:"block",fontSize:"0.73rem",color:"#94a3b8",marginBottom:6}}>Theme</label>
         <div style={{display:"flex",gap:6}}>
@@ -1832,11 +1831,15 @@ function AssistantChat({data, theme}){
         system: cleanSystem,
         messages: cleanMsgs,
       });
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      const response = await fetch("/.netlify/functions/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": (data.settings&&data.settings.apiKey)||"", "anthropic-version": "2023-06-01" },
+        headers: { "Content-Type": "application/json" },
         body: bodyStr,
       });
+      if(!response.ok){
+        const errText = await response.text();
+        throw new Error("Proxy error " + response.status + ": " + errText.slice(0,200));
+      }
       const json = await response.json();
       if(json.error){ throw new Error(json.error.message||JSON.stringify(json.error)); }
       const blocks = (json.content||[]).filter(b=>b.type==="text");
