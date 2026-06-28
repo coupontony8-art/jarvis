@@ -1,0 +1,2198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Jarvis"/>
+  <meta name="theme-color" content="#0a0e1a"/>
+  <title>Jarvis — Command Center</title>
+
+  <!-- PWA manifest inline -->
+  <link rel="manifest" href="data:application/json,%7B%22name%22%3A%22Jarvis%20Command%20Center%22%2C%22short_name%22%3A%22Jarvis%22%2C%22start_url%22%3A%22%2F%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%230a0e1a%22%2C%22theme_color%22%3A%22%230a0e1a%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%2C%253Csvg%2520xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%2520viewBox%3D%270%200%20100%20100%27%253E%253Crect%2520width%3D%27100%27%2520height%3D%27100%27%2520rx%3D%2720%27%2520fill%3D%27%230a0e1a%27%2F%253E%253Ctext%2520y%3D%27.9em%27%2520font-size%3D%2780%27%2520x%3D%2710%27%253E%25E2%259A%25A1%253C%2Ftext%253E%253C%2Fsvg%253E%22%2C%22sizes%22%3A%22any%22%2C%22type%22%3A%22image%2Fsvg%2Bxml%22%7D%5D%7D"/>
+
+  <!-- Apple touch icon (simple lightning bolt) -->
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230a0e1a'/><text y='.9em' font-size='80' x='10'>⚡</text></svg>"/>
+
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+    html,body{height:100%;background:#0a0e1a;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}
+    #root{min-height:100%;padding-bottom:env(safe-area-inset-bottom);}
+    input,select,textarea,button{font-family:inherit;}
+    input[type=range]{-webkit-appearance:none;height:4px;border-radius:4px;background:#1e2d45;}
+    input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#38bdf8;cursor:pointer;}
+    ::-webkit-scrollbar{width:4px;}
+    ::-webkit-scrollbar-track{background:transparent;}
+    ::-webkit-scrollbar-thumb{background:#1e2d45;border-radius:4px;}
+    @keyframes pulse{0%,100%{transform:scale(0.8);opacity:0.5}50%{transform:scale(1.2);opacity:1}}
+    @media(prefers-color-scheme:dark){html{color-scheme:dark;}}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<!-- React + Babel from CDN -->
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+
+<script>
+// ─── PWA STORAGE (localStorage wrapper matching window.storage API) ───────────
+const pwaStorage = {
+  get: async (key) => {
+    try {
+      const val = localStorage.getItem(key);
+      return val ? { key, value: val } : null;
+    } catch { return null; }
+  },
+  set: async (key, value) => {
+    try {
+      localStorage.setItem(key, value);
+      return { key, value };
+    } catch { return null; }
+  },
+  delete: async (key) => {
+    try { localStorage.removeItem(key); return { key, deleted: true }; }
+    catch { return null; }
+  },
+  list: async (prefix) => {
+    try {
+      const keys = Object.keys(localStorage).filter(k => !prefix || k.startsWith(prefix));
+      return { keys };
+    } catch { return { keys: [] }; }
+  }
+};
+
+// ─── SERVICE WORKER REGISTRATION ─────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  const swCode = `const CACHE_NAME = 'jarvis-v1';
+const ASSETS = ['/'];
+
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(ASSETS)));
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil(clients.claim());
+});
+
+self.addEventListener('fetch', e => {
+  // Network first, fall back to cache
+  e.respondWith(
+    fetch(e.request).catch(() => caches.match(e.request))
+  );
+});
+
+self.addEventListener('push', e => {
+  const data = e.data ? e.data.json() : { title: 'Jarvis', body: 'You have a reminder.' };
+  e.waitUntil(
+    self.registration.showNotification(data.title || 'Jarvis', {
+      body: data.body || '',
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      vibrate: [200, 100, 200],
+      tag: data.tag || 'jarvis-notif',
+      renotify: true,
+    })
+  );
+});
+
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(clients.openWindow('/'));
+});
+`;
+  const blob = new Blob([swCode], { type: 'application/javascript' });
+  const swUrl = URL.createObjectURL(blob);
+  navigator.serviceWorker.register(swUrl, { scope: '/' }).catch(e => console.log('SW reg failed:', e));
+}
+
+// ─── PUSH NOTIFICATION HELPER ─────────────────────────────────────────────────
+window.requestNotificationPermission = async () => {
+  if (!('Notification' in window)) return false;
+  const perm = await Notification.requestPermission();
+  return perm === 'granted';
+};
+window.sendLocalNotification = (title, body, delay=0) => {
+  setTimeout(() => {
+    if (Notification.permission === 'granted') {
+      new Notification(title, { body, icon: '', badge: '' });
+    }
+  }, delay);
+};
+</script>
+
+<!-- The App -->
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ─── CONSTANTS ────────────────────────────────────────────────────────────────
+const STORAGE_KEY = "jarvis_data_v7";
+const THEMES = {
+  dark:     { bg:"#0a0e1a", panel:"#111827", border:"#1e2d45", text:"#e2e8f0", muted:"#64748b", accent:"#38bdf8" },
+  midnight: { bg:"#06060f", panel:"#0d0d1f", border:"#1a1a3e", text:"#c7d2fe", muted:"#6366f1", accent:"#818cf8" },
+  carbon:   { bg:"#0c0c0c", panel:"#161616", border:"#2a2a2a", text:"#f0f0f0", muted:"#666",    accent:"#00ff88" },
+};
+const ACCENT_OPTIONS  = ["#38bdf8","#818cf8","#00ff88","#f97316","#ec4899","#a78bfa","#22d3ee","#facc15"];
+const PRIORITY_COLORS = { high:"#ef4444", medium:"#f97316", low:"#22d3ee" };
+const CATEGORY_COLORS = { game:"#22c55e", appointment:"#f59e0b", personal:"#8b5cf6", work:"#38bdf8", other:"#64748b" };
+const CATEGORY_ICONS  = { game:"⚾", appointment:"🏥", personal:"🏠", work:"💼", other:"📌" };
+const ENERGY_COLORS   = { low:"#22d3ee", medium:"#f97316", high:"#ef4444" };
+const ENERGY_LABELS   = { low:"Low effort", medium:"Moderate", high:"High focus" };
+const PROJECT_COLORS  = ["#38bdf8","#22c55e","#f59e0b","#a78bfa","#ec4899","#f97316","#22d3ee","#818cf8"];
+const TIME_SLOTS      = [15,30,45,60,90,120];
+const DAYS            = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const DAYS_FULL       = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+const MONTHS          = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const NOTE_COLORS     = ["#1e2d45","#1a2e1a","#2e1a1a","#2a1e2e","#2e2a1a"];
+const XP_PER_TODO    = 10;
+const XP_PER_HABIT   = 15;
+const XP_PER_STEP    = 25;
+const XP_PER_LEVEL   = 100;
+
+// ─── PERSONALITY ENGINE ───────────────────────────────────────────────────────
+const QUIPS = {
+  todoComplete: [
+    "Task annihilated. The dopamine is deserved.",
+    "Done. Logged. Your future self owes you one.",
+    "CHECK. That's how we do it around here.",
+    "Productivity detected. I'm as surprised as you are.",
+    "Oh you actually did it. I had doubts. I won't admit that again.",
+    "Hell yeah. Task terminated. Moving on.",
+    "Done and dusted. Look at you go.",
+    "That's what I'm talking about. Filed under: actually did the thing.",
+  ],
+  habitComplete: [
+    "Streak intact. Your future self is quietly grateful.",
+    "Habit locked in. The discipline is real even if it doesn't feel like it.",
+    "Body: maintained. Excellent. Please continue existing.",
+    "CONSISTENCY ACHIEVEMENT UNLOCKED. I'm legally required to celebrate this.",
+    "Done. Again. Like you do. Because you're that guy.",
+    "Hell yeah, look at that streak. Don't blow it.",
+    "Your nervous system thanks you. Eventually.",
+    "Logged. The habit machine keeps churning.",
+  ],
+  stepComplete: [
+    "Project step crushed. Forward momentum achieved.",
+    "One step closer. The finish line is still far. But closer.",
+    "Progress logged. The project did not complete itself, so you get full credit.",
+    "STEP ELIMINATED. The project trembles before you.",
+    "That's one down. I believe in you. Statistically.",
+    "Hell of a step. Keep that energy.",
+    "Noted. Marked. Internally celebrated with great enthusiasm.",
+  ],
+  nudge: [
+    "Hey. HEY. {project} is collecting dust over here. Just saying.",
+    "{project}. Remember that? You were excited about it. {days} days ago.",
+    "Checking in on {project} because apparently no one else will.",
+    "The {project} project called. It's not mad, just disappointed. We're all disappointed.",
+    "ALERT: {project} has entered a state of abandonment. Intervention suggested.",
+    "{days} days since you touched {project}. The cobwebs are decorative at this point.",
+    "Look, I'm not your therapist, but {project} needs some damn attention.",
+    "What the hell happened with {project}? {days} days, man.",
+  ],
+  levelUp: [
+    "LEVEL {level} ACHIEVED. You are statistically better than yesterday's you.",
+    "LEVEL {level}! The system is impressed. The system is rarely impressed.",
+    "You hit level {level}. I've updated your threat assessment. Upward.",
+    "LEVEL {level} UNLOCKED. Your brain chemicals should be going absolutely nuts right now.",
+    "Level {level}. Hell yeah. The grind is real. Keep grinding.",
+    "LEVEL {level}. I didn't think you'd make it this far. I mean that as a compliment.",
+  ],
+  greetMorning: [
+    "Good morning. The world is technically still here. Let's exploit that.",
+    "Morning, {name}. Objectives loaded. Coffee recommended. Pants optional.",
+    "Rise and grind, {name}. Or rise and ease into it. I don't judge. Much.",
+    "Good morning. Your schedule is waiting. It's been waiting since midnight, judging you.",
+    "Morning. Let's see what kind of hell today brings. Optimistically.",
+  ],
+  greetAfternoon: [
+    "Afternoon, {name}. Still time to be productive. Theoretically.",
+    "Hey {name}. The day's half gone. What have we accomplished? Actually don't answer that.",
+    "Afternoon check-in. You're doing... something. Probably fine.",
+    "Good afternoon. I've been running your life while you were busy. You're welcome.",
+    "Afternoon. The day isn't dead yet. Neither are your goals. Probably.",
+  ],
+  greetEvening: [
+    "Evening, {name}. Wrapping up or just getting started? Both are valid life choices.",
+    "Good evening. The day is almost over. Make it count or don't. Your call, champ.",
+    "Evening. Whatever you did today — I logged it. All of it.",
+    "Hey {name}. Night mode activated. Energy levels: questionable at best.",
+    "Evening. Time to wind down, reflect, and pretend tomorrow will be more productive.",
+  ],
+  goalCrushed: [
+    "You hit {goal}% this month. That's the goal. That's actually the goal. Holy hell.",
+    "{habit}: {rate}% this month. Goal was {goal}%. You absolute monster.",
+    "Goal smashed on {habit}. {rate}% vs {goal}% target. I'm updating my expectations of you.",
+  ],
+  goalMissed: [
+    "{habit} came in at {rate}% vs {goal}% goal. Not ideal. But we recalibrate.",
+    "Missed the {goal}% target on {habit} — landed at {rate}%. The data is the data.",
+    "{habit}: {rate}%. Goal was {goal}%. Look, it happens. New month, new shot.",
+  ],
+  monthlyReview: [
+    "New month. New goals. Same you, theoretically improved.",
+    "Month's over. Time to see how badly we did and set optimistic new targets.",
+    "Monthly review time. The numbers don't lie, even when we want them to.",
+    "New month, new goals. Let's make this one count. Or at least slightly better.",
+  ],
+  emptyTodo: "No tasks. Either you're incredibly efficient or incredibly avoidant. I choose to believe the former.",
+  emptyHabit: "No habits tracked yet. Your future self is watching. Nervously.",
+  emptyProject: "No projects. Pure potential. Unused potential. Add one whenever the ambition hits.",
+  emptyEvents: "Calendar's clear. Freedom or denial — only you know which.",
+  emptyNotes: "Nothing here. Suspiciously clean.",
+  openDay: "Nothing scheduled. Truly open. Don't waste it. Or do. But maybe don't.",
+  noteAdded: "Thought captured before it evaporated. You're welcome.",
+  eventAdded: "Locked in. I'll remind you before you try to forget.",
+  habitAdded: "New habit created. Day one is always the easiest part. Enjoy it while it lasts.",
+  todoAdded: "Task added to the pile. The pile grows. We manage the pile.",
+};
+
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function quip(key, vars={}){
+  const src = QUIPS[key];
+  if(!src) return "";
+  let s = Array.isArray(src) ? pick(src) : src;
+  Object.entries(vars).forEach(([k,v])=>{ s=s.replaceAll(`{${k}}`,v); });
+  return s;
+}
+function getGreeting(name){
+  const h=new Date().getHours();
+  if(h<12) return quip("greetMorning",{name});
+  if(h<17) return quip("greetAfternoon",{name});
+  return quip("greetEvening",{name});
+}
+
+// ─── HABIT DATA HELPERS ──────────────────────────────────────────────────────
+function monthKey(date){ const d=date||new Date(); return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`; }
+function prevMonthKey(mk){ const[y,m]=mk.split("-").map(Number); return m===1?`${y-1}-12`:`${y}-${String(m-1).padStart(2,"0")}`; }
+function sameMonthLastYearKey(mk){ const[y,m]=mk.split("-"); return`${parseInt(y)-1}-${m}`; }
+function daysInMonthFromKey(mk){ const[y,m]=mk.split("-").map(Number); return new Date(y,m,0).getDate(); }
+function daysElapsedInMonth(mk){ const[y,m]=mk.split("-").map(Number); const now=new Date(); if(now.getFullYear()===y&&now.getMonth()===m-1) return now.getDate(); return daysInMonthFromKey(mk); }
+
+function calcHabitMonthRate(habit, mk){
+  const[y,m]=mk.split("-").map(Number);
+  const days=daysInMonthFromKey(mk);
+
+  if(habit.weeklyTarget){
+    // Weekly-target mode: count weeks in month, goal = weeklyTarget per week
+    // Count actual completions vs (weeks * weeklyTarget)
+    let completions=0, weeks=0;
+    let weekStart=null;
+    for(let d=1;d<=days;d++){
+      const ds=`${y}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+      const dow=new Date(ds+"T12:00:00").getDay();
+      if(dow===0) weeks++; // new week (Sunday)
+      if(habit.completions?.[ds]) completions++;
+    }
+    // if month doesn't start on Sunday, still count the first partial week
+    const firstDow=new Date(`${y}-${String(m).padStart(2,"0")}-01T12:00:00`).getDay();
+    if(firstDow!==0) weeks++;
+    const target=weeks*habit.weeklyTarget;
+    return target===0?null:Math.round((completions/target)*100);
+  }
+
+  // Default: % of scheduled days completed
+  let scheduled=0,completed=0;
+  for(let d=1;d<=days;d++){
+    const ds=`${y}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+    const dow=new Date(ds+"T12:00:00").getDay();
+    const isScheduled=habit.frequency==="daily"||(habit.daysOfWeek||[]).includes(dow);
+    if(isScheduled){ scheduled++; if(habit.completions?.[ds]) completed++; }
+  }
+  return scheduled===0?null:Math.round((completed/scheduled)*100);
+}
+
+function calcGoalForHabit(habit, mk){
+  // last month rate
+  const prevMk=prevMonthKey(mk);
+  const prevRate=calcHabitMonthRate(habit,prevMk);
+  // same month last year
+  const lastYearMk=sameMonthLastYearKey(mk);
+  const lastYearRate=calcHabitMonthRate(habit,lastYearMk);
+  if(prevRate===null) return 69; // giggity
+  const bump=prevRate>=85?5:prevRate>=70?7:10;
+  return Math.min(95,prevRate+bump);
+}
+
+function getHabitGoal(habit, mk){
+  // stored goal takes precedence; otherwise calculate
+  return habit.monthlyGoals?.[mk] ?? calcGoalForHabit(habit,mk);
+}
+
+// ─── XP + LEVEL HELPERS ────────────────────────────────────────────────────────
+function calcLevel(xp){ return Math.floor(xp/XP_PER_LEVEL)+1; }
+function xpForNext(xp){ return XP_PER_LEVEL-(xp%XP_PER_LEVEL); }
+function xpProgress(xp){ return (xp%XP_PER_LEVEL)/XP_PER_LEVEL; }
+
+// ─── BADGE DEFINITIONS ────────────────────────────────────────────────────────
+const BADGE_DEFS = [
+  {id:"first_todo",   icon:"✅", name:"First Blood",      desc:"Completed your first task",          check:(s)=>s.totalTodos>=1},
+  {id:"todo_10",      icon:"📋", name:"List Slayer",       desc:"Completed 10 tasks",                 check:(s)=>s.totalTodos>=10},
+  {id:"todo_50",      icon:"⚡", name:"Task Machine",      desc:"Completed 50 tasks",                 check:(s)=>s.totalTodos>=50},
+  {id:"first_habit",  icon:"🔥", name:"Creature of Habit", desc:"Completed a habit for the first time",check:(s)=>s.totalHabits>=1},
+  {id:"streak_3",     icon:"📅", name:"3-Day Streak",      desc:"3 days of activity in a row",        check:(s)=>s.maxStreak>=3},
+  {id:"streak_7",     icon:"🗓️", name:"Week Warrior",      desc:"7-day activity streak",              check:(s)=>s.maxStreak>=7},
+  {id:"streak_30",    icon:"🏆", name:"Iron Discipline",   desc:"30-day activity streak",             check:(s)=>s.maxStreak>=30},
+  {id:"first_step",   icon:"🚀", name:"In Motion",         desc:"Completed a project step",           check:(s)=>s.totalSteps>=1},
+  {id:"steps_10",     icon:"🛠️", name:"Getting After It",  desc:"Completed 10 project steps",         check:(s)=>s.totalSteps>=10},
+  {id:"level_5",      icon:"⭐", name:"Level 5",           desc:"Reached level 5",                    check:(s)=>calcLevel(s.xp)>=5},
+  {id:"level_10",     icon:"💫", name:"Level 10",          desc:"Reached level 10",                   check:(s)=>calcLevel(s.xp)>=10},
+  {id:"first_note",   icon:"📝", name:"Brain Dump",        desc:"Saved your first note",              check:(s)=>s.totalNotes>=1},
+  {id:"night_owl",    icon:"🦉", name:"Night Owl",         desc:"Completed a task after 10pm",        check:(s)=>s.nightOwl},
+  {id:"early_bird",   icon:"🐦", name:"Early Bird",        desc:"Completed a task before 7am",        check:(s)=>s.earlyBird},
+];
+
+function checkNewBadges(stats, earnedIds){
+  return BADGE_DEFS.filter(b=>!earnedIds.includes(b.id)&&b.check(stats)).map(b=>b.id);
+}
+
+function genId()    { return Date.now().toString(36)+Math.random().toString(36).slice(2); }
+function todayStr() { return new Date().toISOString().slice(0,10); }
+function formatDate(d){ if(!d)return""; const[y,m,day]=d.split("-"); return`${m}/${day}/${y}`; }
+function formatTime(t){ if(!t)return""; const[h,m]=t.split(":"); const hh=parseInt(h); return`${hh%12||12}:${m} ${hh>=12?"PM":"AM"}`; }
+function daysInMonth(y,m){ return new Date(y,m+1,0).getDate(); }
+function firstDayOfMonth(y,m){ return new Date(y,m,1).getDay(); }
+function fmtMins(m){ if(m<60)return`${m}m`; return m%60===0?`${m/60}h`:`${Math.floor(m/60)}h ${m%60}m`; }
+function timeAgo(ts){ const d=Date.now()-ts; if(d<60000)return"just now"; if(d<3600000)return`${Math.floor(d/60000)}m ago`; if(d<86400000)return`${Math.floor(d/3600000)}h ago`; return`${Math.floor(d/86400000)}d ago`; }
+
+const DEFAULT_DATA = {
+  settings:{ name:"Tony", theme:"dark", accent:"#38bdf8" },
+  rewards:{ xp:0, badges:[], currentStreak:0, maxStreak:0, lastActiveDate:null, totalTodos:0, totalHabits:0, totalSteps:0, totalNotes:0, nightOwl:false, earlyBird:false },
+  events:[
+    {id:genId(),title:"Pilots @ Trash Pandas",   date:"2026-06-02",time:"19:30",category:"game",notes:"Russell Road"},
+    {id:genId(),title:"Pilots vs. Shuckers",      date:"2026-06-06",time:"13:00",category:"game",notes:"Interlake H.S."},
+    {id:genId(),title:"Pilots vs. Nuts",          date:"2026-06-07",time:"14:45",category:"game",notes:"Bellevue College"},
+    {id:genId(),title:"Pilots @ Nuts",            date:"2026-06-13",time:"16:30",category:"game",notes:"Bellevue College"},
+    {id:genId(),title:"Pilots @ Aces",            date:"2026-06-24",time:"19:00",category:"game",notes:"Steve Cox Field"},
+    {id:genId(),title:"Pilots vs. Diablos",       date:"2026-07-01",time:"19:30",category:"game",notes:"Marymoor #1"},
+    {id:genId(),title:"Pilots vs. Trash Pandas",  date:"2026-07-12",time:"13:00",category:"game",notes:"Interlake H.S."},
+    {id:genId(),title:"Pilots @ Hops",            date:"2026-07-25",time:"16:30",category:"game",notes:"Bellevue College"},
+    {id:genId(),title:"Pilots @ Shuckers",        date:"2026-07-26",time:"13:00",category:"game",notes:"Newport H.S."},
+    {id:genId(),title:"Pilots @ Space Cowboys",   date:"2026-08-02",time:"12:00",category:"game",notes:"Kent Meridian H.S."},
+    {id:genId(),title:"Pilots @ Rainiers",        date:"2026-08-07",time:"18:30",category:"game",notes:"Island Crest North"},
+    {id:genId(),title:"Pilots vs. Aces",          date:"2026-08-09",time:"16:30",category:"game",notes:"Russell Road"},
+    {id:genId(),title:"Pilots vs. Space Cowboys", date:"2026-08-15",time:"16:30",category:"game",notes:"Bellevue College"},
+    {id:genId(),title:"Pilots vs. Hops",          date:"2026-08-19",time:"19:30",category:"game",notes:"Hartman"},
+    {id:genId(),title:"Run Club",date:"2026-06-30",time:"18:45",category:"personal",notes:"Tuesday run club"},
+    {id:genId(),title:"Run Club",date:"2026-07-07",time:"18:45",category:"personal",notes:"Tuesday run club"},
+    {id:genId(),title:"Run Club",date:"2026-07-14",time:"18:45",category:"personal",notes:"Tuesday run club"},
+    {id:genId(),title:"Run Club",date:"2026-07-21",time:"18:45",category:"personal",notes:"Tuesday run club"},
+    {id:genId(),title:"Run Club",date:"2026-07-28",time:"18:45",category:"personal",notes:"Tuesday run club"},
+    {id:genId(),title:"Run Club",date:"2026-08-04",time:"18:45",category:"personal",notes:"Tuesday run club"},
+    {id:genId(),title:"Run Club",date:"2026-08-11",time:"18:45",category:"personal",notes:"Tuesday run club"},
+    {id:genId(),title:"Run Club",date:"2026-08-18",time:"18:45",category:"personal",notes:"Tuesday run club"},
+    {id:genId(),title:"Run Club",date:"2026-08-25",time:"18:45",category:"personal",notes:"Tuesday run club"},
+  ], todos:[], notes:[],
+  habits:[
+    {id:genId(),title:"Evening workout",  frequency:"daily", daysOfWeek:[0,1,2,3,4,5,6],completions:{},monthlyGoals:{},weeklyTarget:3},
+    {id:genId(),title:"Run club",         frequency:"weekly",daysOfWeek:[3],         completions:{},monthlyGoals:{}},
+    {id:genId(),title:"Meal prep",        frequency:"weekly",daysOfWeek:[0],         completions:{},monthlyGoals:{}},
+    {id:genId(),title:"Heat/sauna",       frequency:"daily", daysOfWeek:[0,1,2,3,4,5,6],completions:{},monthlyGoals:{}},
+    {id:genId(),title:"Stretch",          frequency:"daily", daysOfWeek:[0,1,2,3,4,5,6],completions:{},monthlyGoals:{}},
+    {id:genId(),title:"Meditation",       frequency:"daily", daysOfWeek:[0,1,2,3,4,5,6],completions:{},monthlyGoals:{}},
+    {id:genId(),title:"Reading",          frequency:"daily", daysOfWeek:[0,1,2,3,4,5,6],completions:{},monthlyGoals:{}},
+    {id:genId(),title:"Journaling",       frequency:"daily", daysOfWeek:[0,1,2,3,4,5,6],completions:{},monthlyGoals:{}},
+  ],
+  projects:[
+    { id:genId(), title:"Learn Spanish", color:"#f59e0b", type:"flexible", status:"active",
+      nudgeDays:3, lastProgressDate:null,
+      description:"Work through course books at your own pace. Check off milestones as you hit them — no pressure on order or timing.",
+      steps:[
+        {id:genId(),title:"Chapter 1 — Greetings & basics",done:false,notes:""},
+        {id:genId(),title:"Chapter 2 — Numbers and time",done:false,notes:""},
+        {id:genId(),title:"Chapter 3 — Family vocabulary",done:false,notes:""},
+        {id:genId(),title:"Chapters 1–3 review + practice exercises",done:false,notes:""},
+        {id:genId(),title:"Chapter 4 — Everyday verbs",done:false,notes:""},
+        {id:genId(),title:"Chapter 5 — Common phrases",done:false,notes:""},
+        {id:genId(),title:"First full conversation practice",done:false,notes:""},
+        {id:genId(),title:"Chapter 6 — Food & dining",done:false,notes:""},
+        {id:genId(),title:"Chapter 7 — Travel & directions",done:false,notes:""},
+        {id:genId(),title:"Mid-book review session",done:false,notes:""},
+      ]},
+    { id:genId(), title:"Car Sound Deadening", color:"#38bdf8", type:"linear", status:"active",
+      description:"2024 Civic Sport Touring Hatchback. Layer order: Siless 157mil foam first (bare metal), then MLV on top — floors/trunk/spare well/hatch only. Doors get Siless only + optional XCEL in lower sump. Wheel wells get MLV only (exterior, behind splash guards).",
+      steps:[
+        {id:genId(),title:"Gather & verify all materials",energy:"low",mins:30,done:false,notes:"Siless 157mil (3 packs, 117 sheets), MLV roll (4ft x 25ft), XCEL 1/2 foam (60x16in), aluminum HVAC foil tape (still to buy — skip branded automotive tape)"},
+        {id:genId(),title:"Take all measurements — fill in measurement sheet",energy:"medium",mins:90,done:false,notes:"Bring tape measure. Measure: driver/passenger footwells (width rocker-to-console, length toe board to seat track, seat bolt spacing, pedal perch), rear floor (width, depth, tunnel width+height), trunk floor (width, depth, tie-down spacing), spare tire well (width, depth, jack bracket offset), all 4 doors (width hinge-to-latch, height, sump height, speaker diameter, door card clip boss depth), all 4 wheel wells (width, height, clearance to suspension)"},
+        {id:genId(),title:"Pre-cut all panels at home",energy:"medium",mins:120,done:false,notes:"Cut oversized rectangles only — no exclusion zones yet. Driver/passenger footwells: 22x30in each. Rear floor: 44x30in (pre-score tunnel ridge relief lines down center). Trunk: 42x34in. Spare well: 32x32in. Front doors (x2): 38x28in Siless only. Rear doors (x2): 32x24in Siless only. Wheel wells: plan 2-3 pieces per well, not one 30x30 sheet. Hatch: 38x22in from offcuts last. Keep labeled offcut bag — scraps fill wheel well gaps and hatch patches."},
+        {id:genId(),title:"Install driver + passenger footwells",energy:"high",mins:90,done:false,notes:"Foam first, then MLV. Tile Siless sheets in offset/brick rows so seams dont align. Score foam 60-70% along seat rail edges (1-2in margin). Score foam along stamped floor ribs so it folds into depressions. Knife out seat bolt holes and pedal perch live once you can see them — 3x3in squares to bare metal. Clear grommet cutouts at factory drain points. Slit around wiring harness clips and ground terminals."},
+        {id:genId(),title:"Install rear floor",energy:"high",mins:90,done:false,notes:"Foam + MLV. Let MLV float over tunnel — dont force it tight or it will tent. Score foam every 2-3in along tunnel ridge crown so it compresses and wraps. Check rear seat bolt/anchor points (ISOFIX, latch strikers) — bare metal same as front. If Sport Touring has rear console trim panel, dry-fit it before final stick-down to confirm it clips flush."},
+        {id:genId(),title:"Install trunk floor + spare tire well",energy:"high",mins:90,done:false,notes:"Trunk: single 42x34in piece (fits within 48in roll width, no seam). Score lightly where floor steps toward spare well lip. Knife out tie-down anchors live. Spare well: fold 32x32in square down into bowl and trim flush. Knife out jack bracket and tire retention post to bare metal — bolt needs full metal contact for torque. Clear drain point if present."},
+        {id:genId(),title:"Install all 4 doors — Siless only",energy:"high",mins:120,done:false,notes:"Siless foam only on dry cabin-facing inner skin. DO NOT touch factory vapor barrier. Optional XCEL 1/2in foam in lower sump area only (below glass drop, away from regulator rails + speaker) — hold door card up to cavity first to confirm clearance (~17mm combined thickness). Channel foam around wiring conduit boot at hinge. Knife out live: speaker basket (bare metal), window regulator/motor access, door handle/latch linkage. Avoid covering factory drain holes at bottom of door skin. Front doors first (38x28in), then rear (32x24in)."},
+        {id:genId(),title:"Install wheel wells — MLV only, exterior",energy:"high",mins:120,done:false,notes:"Exterior wells behind splash guards — not the interior cabin tub. MLV only, no foam. Front two wells first. Cut each well as 2-3 overlapping pieces (MLV wont compound-curve as one sheet). Clear any sensor wiring clips to bare metal. Keep clear of all suspension/steering travel — no contact with tire or suspension at full lock/full compression. Trim flush at outer lip. Check edge adhesion after first few wet drives."},
+        {id:genId(),title:"Install rear hatch",energy:"medium",mins:60,done:false,notes:"Cut from offcuts — lowest priority. Inner hatch skin between structural ribs. Slit around wiring harness boot at hatch pivot — must flex every open/close cycle, dont trap under rigid MLV. Knife out wiper motor mounting bolts and hatch latch mechanism to bare metal. Keep clear of hatch strut lower mounting brackets. Seam pieces of MLV with aluminum foil tape if offcuts dont cover in one piece."},
+        {id:genId(),title:"Final check + reassemble",energy:"medium",mins:60,done:false,notes:"Reinstall all panels, door cards, cargo liner. Verify: no material bridging under anything that clips flush, all bare metal exclusion zones clear (seat rails, pedal perch, jack bracket, tire retention post, wiper motor bolts, hatch latch). Apply aluminum HVAC foil tape at panel seams — cosmetic/anti-buzz only. Test drive and check wheel well edges after first wet weather."},
+      ]},
+  ],
+};
+
+// ─── VOICE PARSER ─────────────────────────────────────────────────────────────
+function parseVoiceInput(text){
+  const lower=text.toLowerCase(),result={type:null,data:{}};
+  const timeMatch=text.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i);
+  const parsedTime=timeMatch?(()=>{ let h=parseInt(timeMatch[1]); const m=timeMatch[2]||"00",ap=timeMatch[3].toLowerCase(); if(ap==="pm"&&h!==12)h+=12; if(ap==="am"&&h===12)h=0; return`${String(h).padStart(2,"0")}:${m}`; })():null;
+  const datePatterns=[
+    {rx:/\b(today)\b/,fn:()=>todayStr()},
+    {rx:/\b(tomorrow)\b/,fn:()=>{const d=new Date();d.setDate(d.getDate()+1);return d.toISOString().slice(0,10);}},
+    {rx:/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,fn:m=>{const t=DAYS_FULL.findIndex(d=>d.toLowerCase()===m.toLowerCase());const now=new Date();let diff=t-now.getDay();if(diff<=0)diff+=7;const d=new Date();d.setDate(d.getDate()+diff);return d.toISOString().slice(0,10);}},
+    {rx:/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/,fn:(m,full)=>{const mm=full.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);if(!mm)return null;const y=mm[3]?(mm[3].length===2?"20"+mm[3]:mm[3]):new Date().getFullYear().toString();return`${y}-${mm[1].padStart(2,"0")}-${mm[2].padStart(2,"0")}`;}}
+  ];
+  let parsedDate=null;
+  for(const p of datePatterns){const m=lower.match(p.rx);if(m){parsedDate=p.fn(m[1],text);break;}}
+  if(/\b(add note|note down|jot|remember that)\b/.test(lower)){
+    const body=text.replace(/add note|note down|jot|remember that/gi,"").trim();
+    result.type="note";result.data={body};
+  } else if(/\b(add todo|add task|remind me to|don't forget|remember to)\b/.test(lower)){
+    let title=text.replace(/add todo|add task|remind me to|don't forget|remember to/gi,"").trim();
+    if(parsedTime)title=title.replace(timeMatch[0],"").trim();
+    if(parsedDate)title=title.replace(/(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)/gi,"").trim();
+    title=title.replace(/\s+/g," ").trim();
+    const priority=lower.includes("urgent")||lower.includes("high priority")?"high":lower.includes("low priority")?"low":"medium";
+    result.type="todo";result.data={title,priority,dueDate:parsedDate||"",dueTime:parsedTime||""};
+  } else if(/\b(add event|schedule|game|appointment|meeting)\b/.test(lower)){
+    let title=text.replace(/add event|schedule/gi,"").trim();
+    if(parsedTime)title=title.replace(timeMatch[0],"").trim();
+    if(parsedDate)title=title.replace(/(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)/gi,"").trim();
+    title=title.replace(/\s+/g," ").trim();
+    const cat=lower.includes("game")?"game":lower.includes("appointment")?"appointment":lower.includes("work")?"work":"other";
+    result.type="event";result.data={title,date:parsedDate||todayStr(),time:parsedTime||"",category:cat};
+  } else if(/\b(add habit|track|daily)\b/.test(lower)){
+    result.type="habit";result.data={title:text.replace(/add habit|track|daily/gi,"").trim()};
+  }
+  return result;
+}
+
+// ─── SHARED UI ────────────────────────────────────────────────────────────────
+function SectionHeader({title,accent,action}){
+  return(
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <div style={{width:3,height:16,background:accent,borderRadius:2}}/>
+        <span style={{fontWeight:700,fontSize:"0.78rem",letterSpacing:"0.08em",textTransform:"uppercase",color:"#94a3b8"}}>{title}</span>
+      </div>
+      {action}
+    </div>
+  );
+}
+function Modal({title,onClose,children,theme,wide}){
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={onClose}>
+      <div style={{background:theme.panel,border:`1px solid ${theme.border}`,borderRadius:12,padding:20,width:"100%",maxWidth:wide?600:460,maxHeight:"90vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <span style={{fontWeight:700,fontSize:"1rem",color:theme.text}}>{title}</span>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"#94a3b8",cursor:"pointer",fontSize:"1.2rem",padding:"0 4px"}}>✕</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+function Inp({label,...props}){
+  const s={width:"100%",background:"#1a2540",border:"1px solid #2d3f5a",borderRadius:7,padding:"8px 10px",color:"#e2e8f0",fontSize:"0.85rem",boxSizing:"border-box",...props.style};
+  return(
+    <div style={{marginBottom:12}}>
+      {label&&<label style={{display:"block",fontSize:"0.73rem",color:"#94a3b8",marginBottom:4}}>{label}</label>}
+      {props.as==="select"?<select {...props} as={undefined} style={s}>{props.children}</select>
+       :props.as==="textarea"?<textarea {...props} as={undefined} style={{...s,resize:"vertical",minHeight:props.minHeight||60}}/>
+       :<input {...props} style={s}/>}
+    </div>
+  );
+}
+
+// ─── CLOCK ────────────────────────────────────────────────────────────────────
+function Clock({accent}){
+  const [now,setNow]=useState(new Date());
+  useEffect(()=>{const t=setInterval(()=>setNow(new Date()),1000);return()=>clearInterval(t);},[]);
+  return(
+    <div style={{textAlign:"center",padding:"10px 0 4px"}}>
+      <div style={{fontSize:"2.5rem",fontWeight:700,letterSpacing:"-1px",color:accent,fontFamily:"'SF Mono','Fira Code',monospace"}}>
+        {now.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}
+      </div>
+      <div style={{fontSize:"0.82rem",color:"#94a3b8",marginTop:2}}>
+        {now.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"})}
+      </div>
+    </div>
+  );
+}
+
+// ─── VOICE BUTTON ─────────────────────────────────────────────────────────────
+function VoiceButton({onTranscript,accent}){
+  const [listening,setListening]=useState(false);
+  const [supported]=useState(()=>"webkitSpeechRecognition" in window||"SpeechRecognition" in window);
+  const recRef=useRef(null);
+  const toggle=()=>{
+    if(!supported){alert("Voice input not supported. Try Chrome.");return;}
+    if(listening){recRef.current?.stop();setListening(false);return;}
+    const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    const rec=new SR();rec.lang="en-US";rec.interimResults=false;rec.maxAlternatives=1;
+    rec.onresult=e=>{onTranscript(e.results[0][0].transcript);setListening(false);};
+    rec.onerror=()=>setListening(false);rec.onend=()=>setListening(false);
+    rec.start();recRef.current=rec;setListening(true);
+  };
+  return(
+    <button onClick={toggle} title={listening?"Stop":"Voice"} style={{background:listening?accent:"transparent",border:`1.5px solid ${listening?accent:"#334155"}`,borderRadius:"50%",width:36,height:36,cursor:"pointer",color:listening?"#000":"#94a3b8",display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.2s",flexShrink:0}}>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/>
+        <path d="M19 10v1a7 7 0 0 1-14 0v-1" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round"/>
+        <line x1="12" y1="19" x2="12" y2="23" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+        <line x1="8"  y1="23" x2="16" y2="23" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+      </svg>
+    </button>
+  );
+}
+
+// ─── TOAST ────────────────────────────────────────────────────────────────────
+function Toast({message,accent,onDismiss,xp}){
+  useEffect(()=>{const t=setTimeout(onDismiss,4500);return()=>clearTimeout(t);},[onDismiss]);
+  return(
+    <div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",background:"#0d1b2e",border:`1.5px solid ${accent}`,borderRadius:10,padding:"10px 16px",color:"#e2e8f0",fontSize:"0.83rem",zIndex:2000,boxShadow:`0 4px 24px ${accent}33`,display:"flex",alignItems:"center",gap:8,maxWidth:"92vw"}}>
+      <span style={{color:accent,fontSize:"0.9rem"}}>⚡</span>
+      <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis"}}>{message}</span>
+      {xp&&<span style={{fontSize:"0.72rem",fontWeight:700,color:"#facc15",flexShrink:0,background:"#facc1522",padding:"2px 6px",borderRadius:4}}>+{xp} XP</span>}
+      <button onClick={onDismiss} style={{background:"none",border:"none",color:"#64748b",cursor:"pointer",marginLeft:2,flexShrink:0}}>✕</button>
+    </div>
+  );
+}
+
+// ─── REMINDER ALERT ───────────────────────────────────────────────────────────
+function LevelUpModal({level,accent,theme,onClose}){
+  useEffect(()=>{const t=setTimeout(onClose,6000);return()=>clearTimeout(t);},[onClose]);
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:4000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+      <div style={{background:theme.panel,border:`2px solid ${accent}`,borderRadius:16,padding:"28px 24px",maxWidth:340,width:"100%",textAlign:"center",boxShadow:`0 0 40px ${accent}44`}}>
+        <div style={{fontSize:"3.5rem",marginBottom:8}}>⚡</div>
+        <div style={{fontSize:"1.4rem",fontWeight:800,color:accent,marginBottom:6}}>LEVEL {level}</div>
+        <div style={{fontSize:"0.88rem",color:theme.text,marginBottom:4,lineHeight:1.5}}>{quip("levelUp",{level})}</div>
+        <div style={{fontSize:"0.72rem",color:theme.muted,marginTop:10}}>tap anywhere to dismiss</div>
+        <button onClick={onClose} style={{marginTop:14,background:accent,border:"none",borderRadius:8,padding:"8px 20px",color:"#000",fontWeight:700,cursor:"pointer",fontSize:"0.85rem"}}>LET'S GO</button>
+      </div>
+    </div>
+  );
+}
+
+function BadgeToast({badge,accent,onDismiss}){
+  useEffect(()=>{const t=setTimeout(onDismiss,5000);return()=>clearTimeout(t);},[onDismiss]);
+  return(
+    <div style={{position:"fixed",bottom:80,left:"50%",transform:"translateX(-50%)",background:"#1a1000",border:"1.5px solid #facc15",borderRadius:10,padding:"10px 16px",color:"#e2e8f0",fontSize:"0.83rem",zIndex:2100,boxShadow:"0 4px 24px #facc1544",display:"flex",alignItems:"center",gap:10,maxWidth:"92vw"}}>
+      <span style={{fontSize:"1.3rem"}}>{badge.icon}</span>
+      <div>
+        <div style={{fontWeight:700,color:"#facc15",fontSize:"0.78rem"}}>BADGE UNLOCKED: {badge.name}</div>
+        <div style={{fontSize:"0.72rem",color:"#94a3b8"}}>{badge.desc}</div>
+      </div>
+      <button onClick={onDismiss} style={{background:"none",border:"none",color:"#64748b",cursor:"pointer",marginLeft:4,flexShrink:0}}>✕</button>
+    </div>
+  );
+}
+
+function RewardsPanel({rewards,theme}){
+  const [show,setShow]=useState(false);
+  if(!rewards)return null;
+  const level=calcLevel(rewards.xp);
+  const prog=xpProgress(rewards.xp);
+  const toNext=xpForNext(rewards.xp);
+  const earned=BADGE_DEFS.filter(b=>(rewards.badges||[]).includes(b.id));
+  const locked=BADGE_DEFS.filter(b=>!(rewards.badges||[]).includes(b.id));
+  return(
+    <div style={{background:theme.panel,border:`1px solid ${theme.border}`,borderRadius:10,padding:14}}>
+      <SectionHeader title="Rewards" accent={theme.accent} action={
+        <button onClick={()=>setShow(s=>!s)} style={{background:"none",border:`1px solid ${theme.border}`,borderRadius:6,color:theme.muted,cursor:"pointer",fontSize:"0.72rem",padding:"3px 8px"}}>{show?"Collapse":"Expand"}</button>
+      }/>
+      {/* XP Bar */}
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:show?12:0}}>
+        <div style={{width:36,height:36,borderRadius:"50%",background:`${theme.accent}22`,border:`2px solid ${theme.accent}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          <span style={{fontSize:"0.75rem",fontWeight:800,color:theme.accent}}>{level}</span>
+        </div>
+        <div style={{flex:1}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+            <span style={{fontSize:"0.72rem",fontWeight:700,color:theme.text}}>Level {level}</span>
+            <span style={{fontSize:"0.68rem",color:theme.muted}}>{toNext} XP to next</span>
+          </div>
+          <div style={{height:6,background:theme.bg,borderRadius:4}}>
+            <div style={{height:"100%",background:`linear-gradient(90deg,${theme.accent},#a78bfa)`,borderRadius:4,width:`${prog*100}%`,transition:"width 0.5s"}}/>
+          </div>
+        </div>
+        <div style={{textAlign:"right",flexShrink:0}}>
+          <div style={{fontSize:"0.65rem",color:theme.muted}}>Streak</div>
+          <div style={{fontSize:"0.9rem",fontWeight:700,color:"#f97316"}}>🔥{rewards.currentStreak||0}</div>
+        </div>
+      </div>
+      {show&&(
+        <>
+          <div style={{display:"flex",gap:16,marginBottom:12,padding:"10px",background:theme.bg,borderRadius:8}}>
+            {[["Total XP",rewards.xp||0,"⚡"],["Best Streak",(rewards.maxStreak||0)+"d","📅"],["Badges",(rewards.badges||[]).length+"/"+BADGE_DEFS.length,"🏅"]].map(([l,v,i])=>(
+              <div key={l} style={{flex:1,textAlign:"center"}}>
+                <div style={{fontSize:"1rem"}}>{i}</div>
+                <div style={{fontSize:"0.85rem",fontWeight:700,color:theme.text}}>{v}</div>
+                <div style={{fontSize:"0.63rem",color:theme.muted}}>{l}</div>
+              </div>
+            ))}
+          </div>
+          {earned.length>0&&(
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:"0.68rem",color:theme.muted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Earned</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {earned.map(b=>(
+                  <div key={b.id} title={b.desc} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 9px",background:`${theme.accent}11`,border:`1px solid ${theme.accent}33`,borderRadius:7}}>
+                    <span style={{fontSize:"0.9rem"}}>{b.icon}</span>
+                    <span style={{fontSize:"0.72rem",fontWeight:600,color:theme.text}}>{b.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {locked.length>0&&(
+            <div>
+              <div style={{fontSize:"0.68rem",color:theme.muted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Locked</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                {locked.map(b=>(
+                  <div key={b.id} title={b.desc} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 8px",background:theme.bg,border:`1px solid ${theme.border}`,borderRadius:6,opacity:0.5}}>
+                    <span style={{fontSize:"0.85rem",filter:"grayscale(1)"}}>{b.icon}</span>
+                    <span style={{fontSize:"0.68rem",color:theme.muted}}>{b.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function ReminderAlert({reminders,accent,onDismiss}){
+  if(!reminders.length)return null;
+  return(
+    <div style={{position:"fixed",top:16,right:16,zIndex:3000,display:"flex",flexDirection:"column",gap:8,maxWidth:300}}>
+      {reminders.map(r=>(
+        <div key={r.id} style={{background:"#1e0a0a",border:"1.5px solid #ef4444",borderRadius:10,padding:"12px 14px",color:"#e2e8f0",boxShadow:"0 4px 20px rgba(239,68,68,0.3)",display:"flex",gap:10,alignItems:"flex-start"}}>
+          <span style={{fontSize:"1.1rem",flexShrink:0}}>🔔</span>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:700,fontSize:"0.82rem",color:"#fca5a5",marginBottom:2}}>Reminder</div>
+            <div style={{fontSize:"0.8rem"}}>{r.title}</div>
+            {r.time&&<div style={{fontSize:"0.7rem",color:"#94a3b8",marginTop:2}}>{formatTime(r.time)}</div>}
+          </div>
+          <button onClick={()=>onDismiss(r.id)} style={{background:"none",border:"none",color:"#64748b",cursor:"pointer",padding:0,flexShrink:0}}>✕</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── REMINDER ENGINE ──────────────────────────────────────────────────────────
+function useReminderEngine(events,todos,projects){
+  const [activeAlerts,setActiveAlerts]=useState([]);
+  const dismissedRef=useRef(new Set());
+  useEffect(()=>{
+    const check=()=>{
+      const now=new Date(),nowStr=now.toISOString().slice(0,10),nowH=now.getHours(),nowM=now.getMinutes(),alerts=[];
+      events.forEach(ev=>{
+        if(!ev.time||ev.date!==nowStr)return;
+        const[eh,em]=ev.time.split(":").map(Number),evMins=eh*60+em,nowMins=nowH*60+nowM,diff=evMins-nowMins;
+        if(diff>0&&diff<=30){const k=`event-${ev.id}-pre`;if(!dismissedRef.current.has(k))alerts.push({id:k,title:`${ev.title} in ${diff} min`,time:ev.time});}
+        if(diff===0){const k=`event-${ev.id}-now`;if(!dismissedRef.current.has(k))alerts.push({id:k,title:`Starting now: ${ev.title}`,time:ev.time});}
+      });
+      todos.filter(t=>!t.completed).forEach(t=>{
+        if(!t.dueDate||t.dueDate!==nowStr)return;
+        const[ah,am]=t.dueTime?t.dueTime.split(":").map(Number):[9,0];
+        if(nowH===ah&&nowM===am){const k=`todo-${t.id}-due`;if(!dismissedRef.current.has(k))alerts.push({id:k,title:`Due today: ${t.title}`,time:t.dueTime||""});}
+      });
+      // Project nudges
+      (projects||[]).filter(p=>p.status==="active"&&p.nudgeDays).forEach(p=>{
+        const last=p.lastProgressDate?new Date(p.lastProgressDate):null;
+        const daysSince=last?Math.floor((Date.now()-last.getTime())/86400000):999;
+        const neverStarted=p.steps.every(s=>!s.done);
+        if(daysSince>=p.nudgeDays){
+          const k=`nudge-${p.id}-${nowStr}`;
+          if(!dismissedRef.current.has(k)){
+            const msg=neverStarted?quip("nudge",{project:p.title,days:"?"}):quip("nudge",{project:p.title,days:daysSince});
+            alerts.push({id:k,title:msg,time:"",type:"nudge"});
+          }
+        }
+      });
+      if(alerts.length)setActiveAlerts(prev=>{const ids=new Set(prev.map(a=>a.id));const nn=alerts.filter(a=>!ids.has(a.id));return nn.length?[...prev,...nn]:prev;});
+    };
+    check();const iv=setInterval(check,30000);return()=>clearInterval(iv);
+  },[events,todos]);
+  const dismiss=id=>{dismissedRef.current.add(id);setActiveAlerts(prev=>prev.filter(a=>a.id!==id));};
+  return{activeAlerts,dismiss};
+}
+
+// ─── WEATHER WIDGET ───────────────────────────────────────────────────────────
+function WeatherWidget({theme}){
+  const [wx,setWx]=useState(null);
+  const [loading,setLoading]=useState(false);
+  const [error,setError]=useState(null);
+  const [lastFetch,setLastFetch]=useState(null);
+
+  const fetchWeather=useCallback(()=>{
+    if(!navigator.geolocation){setError("Geolocation not supported");return;}
+    setLoading(true);setError(null);
+    navigator.geolocation.getCurrentPosition(async pos=>{
+      try{
+        const {latitude:lat,longitude:lon}=pos.coords;
+        const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=auto&forecast_days=5`;
+        const res=await fetch(url);
+        const d=await res.json();
+        setWx(d);setLastFetch(Date.now());
+      }catch{setError("Failed to load weather");}
+      finally{setLoading(false);}
+    },()=>{setError("Location permission denied");setLoading(false);});
+  },[]);
+
+  useEffect(()=>{fetchWeather();},[]);
+
+  const wmoIcon=(code)=>{
+    if(code===0)return"☀️";
+    if(code<=2)return"🌤️";
+    if(code<=3)return"☁️";
+    if(code<=49)return"🌫️";
+    if(code<=59)return"🌦️";
+    if(code<=69)return"🌧️";
+    if(code<=79)return"🌨️";
+    if(code<=84)return"🌧️";
+    if(code<=99)return"⛈️";
+    return"🌡️";
+  };
+  const wmoDesc=(code)=>{
+    if(code===0)return"Clear";if(code<=2)return"Partly cloudy";if(code<=3)return"Overcast";
+    if(code<=49)return"Foggy";if(code<=59)return"Drizzle";if(code<=69)return"Rain";
+    if(code<=79)return"Snow";if(code<=84)return"Rain showers";if(code<=99)return"Thunderstorm";
+    return"Unknown";
+  };
+
+  if(loading)return(
+    <div style={{background:theme.panel,border:`1px solid ${theme.border}`,borderRadius:10,padding:14,display:"flex",alignItems:"center",gap:10,color:theme.muted,fontSize:"0.82rem"}}>
+      <span style={{fontSize:"1.2rem"}}>🌡️</span> Detecting location…
+    </div>
+  );
+  if(error)return(
+    <div style={{background:theme.panel,border:`1px solid ${theme.border}`,borderRadius:10,padding:14,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <span style={{color:theme.muted,fontSize:"0.8rem"}}>⚠️ {error}</span>
+      <button onClick={fetchWeather} style={{background:theme.accent,border:"none",borderRadius:6,padding:"4px 10px",color:"#000",fontSize:"0.72rem",fontWeight:700,cursor:"pointer"}}>Retry</button>
+    </div>
+  );
+  if(!wx)return null;
+
+  const cur=wx.current;
+  const daily=wx.daily;
+  const dayNames=daily.time.slice(0,5).map((d,i)=>i===0?"Today":i===1?"Tomorrow":DAYS[new Date(d+"T12:00:00").getDay()]);
+
+  return(
+    <div style={{background:theme.panel,border:`1px solid ${theme.border}`,borderRadius:10,padding:14}}>
+      <SectionHeader title="Weather" accent={theme.accent} action={
+        <button onClick={fetchWeather} style={{background:"none",border:`1px solid ${theme.border}`,borderRadius:6,color:theme.muted,cursor:"pointer",fontSize:"0.72rem",padding:"3px 8px"}}>↻ Refresh</button>
+      }/>
+      {/* Current conditions */}
+      <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:12}}>
+        <div style={{fontSize:"3rem",lineHeight:1}}>{wmoIcon(cur.weather_code)}</div>
+        <div>
+          <div style={{fontSize:"2rem",fontWeight:700,color:theme.text,lineHeight:1}}>{Math.round(cur.temperature_2m)}°F</div>
+          <div style={{fontSize:"0.8rem",color:theme.muted}}>Feels like {Math.round(cur.apparent_temperature)}°F · {wmoDesc(cur.weather_code)}</div>
+          <div style={{fontSize:"0.75rem",color:theme.muted,marginTop:2}}>
+            💧{cur.relative_humidity_2m}% · 💨{Math.round(cur.wind_speed_10m)}mph · 🌧{cur.precipitation_probability}%
+          </div>
+        </div>
+        {lastFetch&&<div style={{marginLeft:"auto",fontSize:"0.65rem",color:theme.muted,alignSelf:"flex-start"}}>{timeAgo(lastFetch)}</div>}
+      </div>
+      {/* 5-day forecast */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:4}}>
+        {dayNames.map((name,i)=>(
+          <div key={i} style={{background:theme.bg,borderRadius:7,padding:"8px 4px",textAlign:"center"}}>
+            <div style={{fontSize:"0.65rem",color:theme.muted,marginBottom:3,fontWeight:600}}>{name}</div>
+            <div style={{fontSize:"1.1rem",lineHeight:1,marginBottom:3}}>{wmoIcon(daily.weather_code[i])}</div>
+            <div style={{fontSize:"0.72rem",fontWeight:700,color:theme.text}}>{Math.round(daily.temperature_2m_max[i])}°</div>
+            <div style={{fontSize:"0.65rem",color:theme.muted}}>{Math.round(daily.temperature_2m_min[i])}°</div>
+            {daily.precipitation_probability_max[i]>20&&(
+              <div style={{fontSize:"0.6rem",color:"#38bdf8",marginTop:2}}>🌧{daily.precipitation_probability_max[i]}%</div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── NOTES PANEL ─────────────────────────────────────────────────────────────
+function NotesPanel({notes,theme,onAdd,onUpdate,onDelete}){
+  const [showNew,setShowNew]=useState(false);
+  const [editing,setEditing]=useState(null);
+  const [body,setBody]=useState("");
+  const [title,setTitle]=useState("");
+  const [pinned,setPinned]=useState(false);
+  const [search,setSearch]=useState("");
+
+  const openNew=()=>{setTitle("");setBody("");setPinned(false);setShowNew(true);setEditing(null);};
+  const openEdit=n=>{setTitle(n.title||"");setBody(n.body);setPinned(!!n.pinned);setEditing(n.id);setShowNew(true);};
+  const save=()=>{
+    if(!body.trim())return;
+    if(editing){onUpdate({...notes.find(n=>n.id===editing),title:title.trim(),body:body.trim(),pinned,updatedAt:Date.now()});}
+    else{onAdd({id:genId(),title:title.trim(),body:body.trim(),pinned,createdAt:Date.now(),updatedAt:Date.now()});}
+    setShowNew(false);setEditing(null);
+  };
+
+  const filtered=notes
+    .filter(n=>!search||(n.title+n.body).toLowerCase().includes(search.toLowerCase()))
+    .sort((a,b)=>(b.pinned?1:0)-(a.pinned?1:0)||(b.updatedAt||0)-(a.updatedAt||0));
+
+  const pinned_notes=filtered.filter(n=>n.pinned);
+  const regular=filtered.filter(n=>!n.pinned);
+
+  const NoteCard=({n})=>(
+    <div onClick={()=>openEdit(n)} style={{background:NOTE_COLORS[Math.abs(n.id.charCodeAt(0))%NOTE_COLORS.length],border:`1px solid ${theme.border}`,borderRadius:8,padding:"10px 12px",cursor:"pointer",position:"relative",transition:"transform 0.1s"}}>
+      {n.pinned&&<span style={{position:"absolute",top:6,right:8,fontSize:"0.7rem"}}>📌</span>}
+      {n.title&&<div style={{fontSize:"0.82rem",fontWeight:700,color:theme.text,marginBottom:4,paddingRight:16}}>{n.title}</div>}
+      <div style={{fontSize:"0.78rem",color:"#94a3b8",lineHeight:1.5,display:"-webkit-box",WebkitLineClamp:3,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{n.body}</div>
+      <div style={{fontSize:"0.63rem",color:theme.muted,marginTop:6}}>{timeAgo(n.updatedAt||n.createdAt||0)}</div>
+    </div>
+  );
+
+  return(
+    <div style={{background:theme.panel,border:`1px solid ${theme.border}`,borderRadius:10,padding:14}}>
+      <SectionHeader title={`Notes${notes.length?" ("+notes.length+")":""}`} accent={theme.accent} action={
+        <button onClick={openNew} style={{background:theme.accent,border:"none",borderRadius:6,color:"#000",fontSize:"0.75rem",fontWeight:700,padding:"4px 10px",cursor:"pointer"}}>+ Note</button>
+      }/>
+      {notes.length>3&&(
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search notes…"
+          style={{width:"100%",background:theme.bg,border:`1px solid ${theme.border}`,borderRadius:7,padding:"7px 10px",color:theme.text,fontSize:"0.8rem",marginBottom:10,boxSizing:"border-box",outline:"none"}}/>
+      )}
+      {filtered.length===0&&<p style={{color:theme.muted,fontSize:"0.8rem",textAlign:"center",padding:"8px 0"}}>Nothing here. Suspiciously clean. Your brain has thoughts — capture them.</p>}
+      {pinned_notes.length>0&&(
+        <div style={{marginBottom:8}}>
+          <div style={{fontSize:"0.65rem",color:theme.muted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:5}}>Pinned</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>{pinned_notes.map(n=><NoteCard key={n.id} n={n}/>)}</div>
+        </div>
+      )}
+      {regular.length>0&&(
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>{regular.map(n=><NoteCard key={n.id} n={n}/>)}</div>
+      )}
+      {showNew&&(
+        <Modal title={editing?"Edit Note":"New Note"} onClose={()=>{setShowNew(false);setEditing(null);}} theme={theme}>
+          <Inp label="Title (optional)" value={title} onChange={e=>setTitle(e.target.value)} placeholder="Quick title…"/>
+          <Inp label="Note" as="textarea" value={body} onChange={e=>setBody(e.target.value)} placeholder="Write anything…" minHeight={120}/>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+            <button onClick={()=>setPinned(p=>!p)} style={{background:pinned?`${theme.accent}22`:"transparent",border:`1px solid ${pinned?theme.accent:theme.border}`,borderRadius:6,padding:"5px 10px",color:pinned?theme.accent:theme.muted,cursor:"pointer",fontSize:"0.78rem"}}>
+              {pinned?"📌 Pinned":"📌 Pin note"}
+            </button>
+            {editing&&<button onClick={()=>{onDelete(editing);setShowNew(false);setEditing(null);}} style={{marginLeft:"auto",background:"none",border:"1px solid #ef444433",borderRadius:6,color:"#ef4444",cursor:"pointer",fontSize:"0.72rem",padding:"5px 10px",opacity:0.8}}>Delete</button>}
+          </div>
+          <button onClick={save} style={{width:"100%",background:theme.accent,border:"none",borderRadius:8,padding:"10px",color:"#000",fontWeight:700,cursor:"pointer",fontSize:"0.9rem"}}>Save Note</button>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ─── TODAY SUMMARY ────────────────────────────────────────────────────────────
+function TodaySummary({events,todos,habits,projects,theme}){
+  const [show,setShow]=useState(true);
+  const today=todayStr(),todayDow=new Date().getDay();
+  const now=new Date(),nowMins=now.getHours()*60+now.getMinutes();
+
+  const todayEvents=[...events]
+    .filter(e=>e.date===today)
+    .sort((a,b)=>(a.time||"").localeCompare(b.time||""));
+
+  const urgentTodos=todos.filter(t=>!t.completed&&(t.dueDate===today||t.priority==="high")).slice(0,5);
+
+  const todayHabits=habits.filter(h=>h.frequency==="daily"||(h.daysOfWeek||[]).includes(todayDow));
+  const habitsDone=todayHabits.filter(h=>h.completions?.[today]).length;
+
+  const nextEvents=todayEvents.filter(e=>{
+    if(!e.time)return true;
+    const[h,m]=e.time.split(":").map(Number);return h*60+m>=nowMins;
+  });
+
+  const activeProjects=projects.filter(p=>p.status==="active");
+  const projectSuggestions=activeProjects.flatMap(p=>{
+    const next=p.type==="linear"?p.steps.find(s=>!s.done):p.steps.filter(s=>!s.done)[0];
+    return next&&next.mins<=60?[{project:p,step:next}]:[];
+  }).slice(0,2);
+
+  // Project nudges for Today view
+  const nudgeProjects=(projects||[]).filter(p=>{
+    if(p.status!=="active"||!p.nudgeDays)return false;
+    const last=p.lastProgressDate?new Date(p.lastProgressDate):null;
+    const daysSince=last?Math.floor((Date.now()-last.getTime())/86400000):999;
+    return daysSince>=p.nudgeDays;
+  });
+
+  const isEmpty=todayEvents.length===0&&urgentTodos.length===0&&todayHabits.length===0&&nudgeProjects.length===0;
+
+  return(
+    <div style={{background:theme.panel,border:`1.5px solid ${theme.accent}44`,borderRadius:10,padding:14}}>
+      <SectionHeader title="Today" accent={theme.accent} action={
+        <button onClick={()=>setShow(s=>!s)} style={{background:"none",border:`1px solid ${theme.border}`,borderRadius:6,color:theme.muted,cursor:"pointer",fontSize:"0.72rem",padding:"3px 8px"}}>{show?"Collapse":"Expand"}</button>
+      }/>
+      {show&&(
+        <>
+          {isEmpty&&<p style={{color:theme.muted,fontSize:"0.82rem",textAlign:"center",padding:"6px 0"}}>Nothing scheduled. Truly open. The system recommends: don't waste it. Or do. I'm an app, not your mom.</p>}
+
+          {/* Schedule strip */}
+          {todayEvents.length>0&&(
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:"0.68rem",color:theme.muted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Schedule</div>
+              <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                {todayEvents.map(ev=>{
+                  const isPast=ev.time&&(()=>{const[h,m]=ev.time.split(":").map(Number);return h*60+m<nowMins;})();
+                  return(
+                    <div key={ev.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",background:theme.bg,borderRadius:7,borderLeft:`3px solid ${CATEGORY_COLORS[ev.category]||"#64748b"}`,opacity:isPast?0.45:1}}>
+                      <span style={{fontSize:"0.85rem",flexShrink:0}}>{CATEGORY_ICONS[ev.category]||"📌"}</span>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:"0.83rem",fontWeight:600,color:theme.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ev.title}</div>
+                        {ev.time&&<div style={{fontSize:"0.68rem",color:theme.muted}}>{formatTime(ev.time)}</div>}
+                      </div>
+                      {isPast&&<span style={{fontSize:"0.65rem",color:theme.muted,flexShrink:0}}>done</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Habits progress */}
+          {todayHabits.length>0&&(
+            <div style={{marginBottom:12}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:5}}>
+                <div style={{fontSize:"0.68rem",color:theme.muted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Habits</div>
+                <span style={{fontSize:"0.72rem",color:habitsDone===todayHabits.length?"#22c55e":theme.muted}}>{habitsDone}/{todayHabits.length} done</span>
+              </div>
+              <div style={{height:5,background:theme.bg,borderRadius:4}}>
+                <div style={{height:"100%",background:habitsDone===todayHabits.length?"#22c55e":theme.accent,borderRadius:4,width:`${todayHabits.length?(habitsDone/todayHabits.length)*100:0}%`,transition:"width 0.4s"}}/>
+              </div>
+            </div>
+          )}
+
+          {/* Urgent/due todos */}
+          {urgentTodos.length>0&&(
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:"0.68rem",color:theme.muted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Needs attention</div>
+              <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                {urgentTodos.map(t=>(
+                  <div key={t.id} style={{display:"flex",alignItems:"center",gap:7,padding:"6px 10px",background:theme.bg,borderRadius:7,borderLeft:`3px solid ${PRIORITY_COLORS[t.priority]}`}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:"0.82rem",color:theme.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</div>
+                      {t.dueDate===today&&<div style={{fontSize:"0.66rem",color:"#ef4444"}}>Due today</div>}
+                    </div>
+                    <span style={{fontSize:"0.62rem",padding:"1px 5px",borderRadius:4,background:`${PRIORITY_COLORS[t.priority]}22`,color:PRIORITY_COLORS[t.priority],flexShrink:0,textTransform:"capitalize"}}>{t.priority}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Nudge banners */}
+          {nudgeProjects.length>0&&(
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:"0.68rem",color:theme.muted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Overdue check-in</div>
+              <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                {nudgeProjects.map(p=>{
+                  const last=p.lastProgressDate?new Date(p.lastProgressDate):null;
+                  const daysSince=last?Math.floor((Date.now()-last.getTime())/86400000):null;
+                  const neverStarted=p.steps.every(s=>!s.done);
+                  return(
+                    <div key={p.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:theme.bg,borderRadius:7,borderLeft:`3px solid ${p.color||theme.accent}`}}>
+                      <span style={{fontSize:"1rem",flexShrink:0}}>🔔</span>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:"0.82rem",fontWeight:600,color:theme.text}}>{p.title}</div>
+                        <div style={{fontSize:"0.7rem",color:theme.muted}}>
+                          {neverStarted?quip("nudge",{project:p.title,days:"?"}):quip("nudge",{project:p.title,days:daysSince})}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Project suggestions */}
+          {projectSuggestions.length>0&&(
+            <div>
+              <div style={{fontSize:"0.68rem",color:theme.muted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Could work on today</div>
+              <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                {projectSuggestions.map(({project:p,step:s},i)=>(
+                  <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",background:theme.bg,borderRadius:7,borderLeft:`3px solid ${p.color}`}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:"0.7rem",color:p.color,fontWeight:600,marginBottom:1}}>{p.title}</div>
+                      <div style={{fontSize:"0.8rem",color:theme.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.title}</div>
+                    </div>
+                    <div style={{display:"flex",gap:6,flexShrink:0}}>
+                      <span style={{fontSize:"0.65rem",color:ENERGY_COLORS[s.energy]}}>{ENERGY_LABELS[s.energy]}</span>
+                      <span style={{fontSize:"0.65rem",color:theme.muted}}>⏱{fmtMins(s.mins)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── CALENDAR PANEL ───────────────────────────────────────────────────────────
+function CalendarPanel({events,todos,theme}){
+  const today=new Date();
+  const [viewYear,setViewYear]=useState(today.getFullYear());
+  const [viewMonth,setViewMonth]=useState(today.getMonth());
+  const [selected,setSelected]=useState(todayStr());
+  const todayS=todayStr();
+  const numDays=daysInMonth(viewYear,viewMonth),firstDay=firstDayOfMonth(viewYear,viewMonth);
+  const cells=Array.from({length:firstDay+numDays},(_,i)=>i<firstDay?null:i-firstDay+1);
+  while(cells.length%7!==0)cells.push(null);
+  const prevMonth=()=>{if(viewMonth===0){setViewMonth(11);setViewYear(y=>y-1);}else setViewMonth(m=>m-1);};
+  const nextMonth=()=>{if(viewMonth===11){setViewMonth(0);setViewYear(y=>y+1);}else setViewMonth(m=>m+1);};
+  const ds=day=>`${viewYear}-${String(viewMonth+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+  const eventsFor=day=>events.filter(e=>e.date===ds(day));
+  const todosFor=day=>todos.filter(t=>t.dueDate===ds(day)&&!t.completed);
+  const selEvs=selected?events.filter(e=>e.date===selected):[];
+  const selTodos=selected?todos.filter(t=>t.dueDate===selected&&!t.completed):[];
+  return(
+    <div style={{background:theme.panel,border:`1px solid ${theme.border}`,borderRadius:10,padding:14}}>
+      <SectionHeader title="Calendar" accent={theme.accent} action={
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <button onClick={prevMonth} style={{background:"none",border:`1px solid ${theme.border}`,borderRadius:6,color:theme.muted,cursor:"pointer",padding:"2px 8px",fontSize:"0.8rem"}}>‹</button>
+          <span style={{fontSize:"0.78rem",fontWeight:700,color:theme.text,minWidth:106,textAlign:"center"}}>{MONTHS[viewMonth]} {viewYear}</span>
+          <button onClick={nextMonth} style={{background:"none",border:`1px solid ${theme.border}`,borderRadius:6,color:theme.muted,cursor:"pointer",padding:"2px 8px",fontSize:"0.8rem"}}>›</button>
+        </div>
+      }/>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}}>
+        {DAYS.map(d=><div key={d} style={{textAlign:"center",fontSize:"0.62rem",fontWeight:700,color:theme.muted,padding:"2px 0"}}>{d}</div>)}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
+        {cells.map((day,i)=>{
+          if(!day)return <div key={`e${i}`}/>;
+          const d=ds(day),isToday=d===todayS,isSel=d===selected;
+          const dots=[...eventsFor(day).map(e=>CATEGORY_COLORS[e.category]||"#64748b"),...todosFor(day).map(()=>PRIORITY_COLORS.medium)].slice(0,3);
+          return(
+            <div key={d} onClick={()=>setSelected(d)} style={{textAlign:"center",padding:"5px 2px 4px",borderRadius:7,cursor:"pointer",background:isSel?theme.accent:isToday?`${theme.accent}22`:"transparent",border:isToday&&!isSel?`1px solid ${theme.accent}`:"1px solid transparent",transition:"background 0.15s"}}>
+              <div style={{fontSize:"0.78rem",fontWeight:isToday||isSel?700:400,color:isSel?"#000":isToday?theme.accent:theme.text,lineHeight:1.3}}>{day}</div>
+              {dots.length>0&&<div style={{display:"flex",justifyContent:"center",gap:2,marginTop:2}}>{dots.map((c,ci)=><div key={ci} style={{width:4,height:4,borderRadius:"50%",background:isSel?"#000":c}}/>)}</div>}
+            </div>
+          );
+        })}
+      </div>
+      {selected&&(selEvs.length>0||selTodos.length>0)&&(
+        <div style={{marginTop:10,borderTop:`1px solid ${theme.border}`,paddingTop:10}}>
+          <div style={{fontSize:"0.72rem",color:theme.muted,marginBottom:6,fontWeight:600}}>{formatDate(selected)}</div>
+          <div style={{display:"flex",flexDirection:"column",gap:4}}>
+            {selEvs.map(ev=>(
+              <div key={ev.id} style={{display:"flex",alignItems:"center",gap:7,padding:"5px 8px",background:theme.bg,borderRadius:6,borderLeft:`3px solid ${CATEGORY_COLORS[ev.category]||"#64748b"}`}}>
+                <span>{CATEGORY_ICONS[ev.category]||"📌"}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:"0.8rem",fontWeight:600,color:theme.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ev.title}</div>
+                  {ev.time&&<div style={{fontSize:"0.68rem",color:theme.muted}}>{formatTime(ev.time)}</div>}
+                </div>
+                <span style={{fontSize:"0.62rem",padding:"1px 5px",borderRadius:4,background:`${CATEGORY_COLORS[ev.category]}22`,color:CATEGORY_COLORS[ev.category],textTransform:"capitalize",flexShrink:0}}>{ev.category}</span>
+              </div>
+            ))}
+            {selTodos.map(t=>(
+              <div key={t.id} style={{display:"flex",alignItems:"center",gap:7,padding:"5px 8px",background:theme.bg,borderRadius:6,borderLeft:`3px solid ${PRIORITY_COLORS[t.priority]}`}}>
+                <span>✅</span>
+                <div style={{flex:1,fontSize:"0.8rem",color:theme.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</div>
+                <span style={{fontSize:"0.62rem",padding:"1px 5px",borderRadius:4,background:`${PRIORITY_COLORS[t.priority]}22`,color:PRIORITY_COLORS[t.priority],textTransform:"capitalize",flexShrink:0}}>{t.priority}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {selected&&selEvs.length===0&&selTodos.length===0&&(
+        <div style={{marginTop:8,borderTop:`1px solid ${theme.border}`,paddingTop:8,fontSize:"0.75rem",color:theme.muted,textAlign:"center"}}>Nothing on {formatDate(selected)}</div>
+      )}
+      <div style={{marginTop:10,display:"flex",flexWrap:"wrap",gap:"5px 10px"}}>
+        {Object.entries(CATEGORY_COLORS).map(([k,c])=>(
+          <div key={k} style={{display:"flex",alignItems:"center",gap:4}}>
+            <div style={{width:7,height:7,borderRadius:"50%",background:c}}/>
+            <span style={{fontSize:"0.63rem",color:theme.muted,textTransform:"capitalize"}}>{k}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── EVENTS PANEL ─────────────────────────────────────────────────────────────
+function EventsPanel({events,theme,onAdd,onDelete}){
+  const [showModal,setShowModal]=useState(false);
+  const [form,setForm]=useState({title:"",date:todayStr(),time:"",category:"other",notes:""});
+  const upcoming=[...events].filter(e=>e.date>=todayStr()).sort((a,b)=>a.date.localeCompare(b.date)||(a.time||"").localeCompare(b.time||""));
+  const save=()=>{if(!form.title.trim())return;onAdd({...form,id:genId(),title:form.title.trim()});setForm({title:"",date:todayStr(),time:"",category:"other",notes:""});setShowModal(false);};
+  return(
+    <div style={{background:theme.panel,border:`1px solid ${theme.border}`,borderRadius:10,padding:14}}>
+      <SectionHeader title="Upcoming Events" accent={theme.accent} action={
+        <button onClick={()=>setShowModal(true)} style={{background:theme.accent,border:"none",borderRadius:6,color:"#000",fontSize:"0.75rem",fontWeight:700,padding:"4px 10px",cursor:"pointer"}}>+ Add</button>
+      }/>
+      {upcoming.length===0?<p style={{color:theme.muted,fontSize:"0.8rem",textAlign:"center",padding:"8px 0"}}>Nothing scheduled. The calendar is ominously clear.</p>:(
+        <div style={{display:"flex",flexDirection:"column",gap:5}}>
+          {upcoming.slice(0,8).map(ev=>(
+            <div key={ev.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 8px",background:theme.bg,borderRadius:7,borderLeft:`3px solid ${CATEGORY_COLORS[ev.category]||"#64748b"}`}}>
+              <span style={{fontSize:"0.9rem",flexShrink:0}}>{CATEGORY_ICONS[ev.category]||"📌"}</span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:"0.85rem",fontWeight:600,color:theme.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ev.title}</div>
+                <div style={{fontSize:"0.7rem",color:theme.muted}}>{formatDate(ev.date)}{ev.time?` · ${formatTime(ev.time)}`:""}</div>
+              </div>
+              <span style={{fontSize:"0.63rem",padding:"2px 6px",borderRadius:4,background:`${CATEGORY_COLORS[ev.category]}22`,color:CATEGORY_COLORS[ev.category],textTransform:"capitalize",flexShrink:0}}>{ev.category}</span>
+              <button onClick={()=>onDelete(ev.id)} style={{background:"none",border:"none",color:theme.muted,cursor:"pointer",fontSize:"0.8rem",opacity:0.5,flexShrink:0}}>✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+      {showModal&&(
+        <Modal title="Add Event" onClose={()=>setShowModal(false)} theme={theme}>
+          <Inp label="Title" value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="e.g. Pilots game vs. Tigers"/>
+          <Inp label="Date" type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/>
+          <Inp label="Time (optional)" type="time" value={form.time} onChange={e=>setForm({...form,time:e.target.value})}/>
+          <Inp label="Category" as="select" value={form.category} onChange={e=>setForm({...form,category:e.target.value})}>
+            {Object.keys(CATEGORY_COLORS).map(c=><option key={c} value={c}>{CATEGORY_ICONS[c]} {c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
+          </Inp>
+          <Inp label="Notes (optional)" value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} placeholder="Location, details…"/>
+          <button onClick={save} style={{width:"100%",background:theme.accent,border:"none",borderRadius:8,padding:"10px",color:"#000",fontWeight:700,cursor:"pointer",fontSize:"0.9rem",marginTop:4}}>Save Event</button>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ─── TODO PANEL ───────────────────────────────────────────────────────────────
+function TodoPanel({todos,theme,onAdd,onToggle,onDelete}){
+  const [showModal,setShowModal]=useState(false);
+  const [form,setForm]=useState({title:"",priority:"medium",dueDate:"",dueTime:""});
+  const [filter,setFilter]=useState("active");
+  const filtered=todos.filter(t=>filter==="all"?true:filter==="active"?!t.completed:t.completed)
+    .sort((a,b)=>{const po={high:0,medium:1,low:2};if(a.completed!==b.completed)return a.completed?1:-1;return(po[a.priority]||1)-(po[b.priority]||1);});
+  const save=()=>{if(!form.title.trim())return;onAdd({...form,id:genId(),title:form.title.trim(),completed:false});setForm({title:"",priority:"medium",dueDate:"",dueTime:""});setShowModal(false);};
+  return(
+    <div style={{background:theme.panel,border:`1px solid ${theme.border}`,borderRadius:10,padding:14}}>
+      <SectionHeader title="To-Do" accent={theme.accent} action={
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          <div style={{display:"flex",gap:2,background:theme.bg,borderRadius:6,padding:2}}>
+            {["active","completed","all"].map(f=>(
+              <button key={f} onClick={()=>setFilter(f)} style={{background:filter===f?theme.accent:"none",border:"none",borderRadius:4,padding:"2px 7px",fontSize:"0.63rem",color:filter===f?"#000":theme.muted,cursor:"pointer",fontWeight:filter===f?700:400,textTransform:"capitalize"}}>{f}</button>
+            ))}
+          </div>
+          <button onClick={()=>setShowModal(true)} style={{background:theme.accent,border:"none",borderRadius:6,color:"#000",fontSize:"0.75rem",fontWeight:700,padding:"4px 10px",cursor:"pointer"}}>+ Add</button>
+        </div>
+      }/>
+      {filtered.length===0?<p style={{color:theme.muted,fontSize:"0.8rem",textAlign:"center",padding:"8px 0"}}>Nothing here. Either you're done or you're in denial.</p>:(
+        <div style={{display:"flex",flexDirection:"column",gap:5}}>
+          {filtered.map(t=>(
+            <div key={t.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 8px",background:theme.bg,borderRadius:7,opacity:t.completed?0.5:1,borderLeft:`3px solid ${PRIORITY_COLORS[t.priority]}`}}>
+              <button onClick={()=>onToggle(t.id)} style={{width:18,height:18,border:`2px solid ${t.completed?theme.accent:theme.muted}`,borderRadius:4,background:t.completed?theme.accent:"transparent",cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",color:"#000",fontSize:"0.7rem",padding:0}}>{t.completed?"✓":""}</button>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:"0.85rem",color:theme.text,textDecoration:t.completed?"line-through":"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</div>
+                {(t.dueDate||t.dueTime)&&<div style={{fontSize:"0.7rem",color:theme.muted}}>{t.dueDate?formatDate(t.dueDate):""}{t.dueTime?` ${formatTime(t.dueTime)}`:""}</div>}
+              </div>
+              <span style={{fontSize:"0.63rem",padding:"2px 6px",borderRadius:4,background:`${PRIORITY_COLORS[t.priority]}22`,color:PRIORITY_COLORS[t.priority],textTransform:"capitalize",flexShrink:0}}>{t.priority}</span>
+              <button onClick={()=>onDelete(t.id)} style={{background:"none",border:"none",color:theme.muted,cursor:"pointer",fontSize:"0.8rem",opacity:0.5,flexShrink:0}}>✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+      {showModal&&(
+        <Modal title="Add Task" onClose={()=>setShowModal(false)} theme={theme}>
+          <Inp label="Task" value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="What needs to be done?"/>
+          <Inp label="Priority" as="select" value={form.priority} onChange={e=>setForm({...form,priority:e.target.value})}>
+            <option value="high">🔴 High</option><option value="medium">🟠 Medium</option><option value="low">🔵 Low</option>
+          </Inp>
+          <Inp label="Due Date (optional)" type="date" value={form.dueDate} onChange={e=>setForm({...form,dueDate:e.target.value})}/>
+          <Inp label="Due Time (optional)" type="time" value={form.dueTime} onChange={e=>setForm({...form,dueTime:e.target.value})}/>
+          <button onClick={save} style={{width:"100%",background:theme.accent,border:"none",borderRadius:8,padding:"10px",color:"#000",fontWeight:700,cursor:"pointer",fontSize:"0.9rem",marginTop:4}}>Save Task</button>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ─── HABITS PANEL ─────────────────────────────────────────────────────────────
+// ─── MONTHLY REVIEW MODAL ────────────────────────────────────────────────────
+function MonthlyReviewModal({habits, theme, onClose, onSetGoal}){
+  const mk=monthKey();
+  const prevMk=prevMonthKey(mk);
+  const lastYearMk=sameMonthLastYearKey(mk);
+  const now=new Date();
+  const monthName=MONTHS[now.getMonth()];
+  const [goals,setGoals]=useState(()=>{
+    const g={};
+    habits.forEach(h=>{g[h.id]=getHabitGoal(h,mk);});
+    return g;
+  });
+
+  const rows=habits.map(h=>{
+    const prevRate=calcHabitMonthRate(h,prevMk);
+    const lyRate=calcHabitMonthRate(h,lastYearMk);
+    const suggested=calcGoalForHabit(h,mk);
+    return{h,prevRate,lyRate,suggested,goal:goals[h.id]??suggested};
+  });
+
+  const save=()=>{
+    onSetGoal(goals);
+    onClose();
+  };
+
+  const barColor=(rate,goal)=>{
+    if(rate===null)return"#334155";
+    if(rate>=goal)return"#22c55e";
+    if(rate>=goal*0.8)return"#f59e0b";
+    return"#ef4444";
+  };
+
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={onClose}>
+      <div style={{background:theme.panel,border:`1.5px solid ${theme.accent}`,borderRadius:14,padding:20,width:"100%",maxWidth:500,maxHeight:"90vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
+        <div style={{textAlign:"center",marginBottom:16}}>
+          <div style={{fontSize:"1.4rem",marginBottom:4}}>📊</div>
+          <div style={{fontSize:"1.1rem",fontWeight:800,color:theme.accent}}>Monthly Goal Review</div>
+          <div style={{fontSize:"0.8rem",color:theme.muted,marginTop:4}}>{pick(QUIPS.monthlyReview)}</div>
+        </div>
+
+        <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:16}}>
+          {rows.map(({h,prevRate,lyRate,suggested,goal})=>{
+            const curRate=calcHabitMonthRate(h,mk);
+            const daysElapsed=daysElapsedInMonth(mk);
+            const daysTotal=daysInMonthFromKey(mk);
+            return(
+              <div key={h.id} style={{background:theme.bg,borderRadius:10,padding:"12px 14px",border:`1px solid ${theme.border}`}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                  <span style={{fontSize:"0.88rem",fontWeight:700,color:theme.text}}>{h.title}</span>
+                  {curRate!==null&&(
+                    <span style={{fontSize:"0.72rem",color:barColor(curRate,goal),fontWeight:700}}>{curRate}% so far</span>
+                  )}
+                </div>
+
+                {/* Comparison row */}
+                <div style={{display:"flex",gap:8,marginBottom:10}}>
+                  {[
+                    {label:"Last month",val:prevRate,mk:prevMk},
+                    {label:"Same month last year",val:lyRate,mk:lastYearMk},
+                    {label:`${monthName} so far`,val:curRate,mk:mk,current:true},
+                  ].map(({label,val,current})=>(
+                    <div key={label} style={{flex:1,background:theme.panel,borderRadius:7,padding:"6px 8px",textAlign:"center",border:current?`1px solid ${theme.accent}44`:"none"}}>
+                      <div style={{fontSize:"0.62rem",color:theme.muted,marginBottom:3,lineHeight:1.3}}>{label}</div>
+                      {val===null
+                        ?<div style={{fontSize:"0.75rem",color:theme.muted}}>—</div>
+                        :<div style={{fontSize:"0.95rem",fontWeight:700,color:barColor(val,goal)}}>{val}%</div>
+                      }
+                    </div>
+                  ))}
+                </div>
+
+                {/* Goal setter */}
+                <div>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+                    <span style={{fontSize:"0.7rem",color:theme.muted}}>{monthName} goal</span>
+                    <span style={{fontSize:"0.78rem",fontWeight:700,color:theme.accent}}>{goals[h.id]??suggested}%</span>
+                  </div>
+                  <input type="range" min={10} max={100} step={1}
+                    value={goals[h.id]??suggested}
+                    onChange={e=>setGoals(g=>({...g,[h.id]:Number(e.target.value)}))}
+                    style={{width:"100%",accentColor:theme.accent}}/>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:"0.62rem",color:theme.muted}}>
+                    <span>10%</span>
+                    <span style={{color:"#facc15"}}>
+                      {h.weeklyTarget?`Target: ${h.weeklyTarget}x/week`:`Suggested: ${suggested}%${suggested===69?" 👀":""}`}
+                    </span>
+                    <span>100%</span>
+                  </div>
+                </div>
+
+                {/* Progress bar for current month */}
+                {curRate!==null&&(
+                  <div style={{marginTop:8}}>
+                    <div style={{height:5,background:theme.panel,borderRadius:4,overflow:"hidden"}}>
+                      <div style={{height:"100%",background:barColor(curRate,goals[h.id]??suggested),borderRadius:4,width:`${Math.min(100,curRate)}%`,transition:"width 0.4s"}}/>
+                    </div>
+                    <div style={{fontSize:"0.62rem",color:theme.muted,marginTop:2,textAlign:"right"}}>{daysElapsed}/{daysTotal} days tracked</div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <button onClick={save} style={{width:"100%",background:theme.accent,border:"none",borderRadius:9,padding:"11px",color:"#000",fontWeight:800,cursor:"pointer",fontSize:"0.9rem"}}>
+          Lock In Goals 🔒
+        </button>
+        <button onClick={onClose} style={{width:"100%",background:"none",border:"none",color:theme.muted,cursor:"pointer",fontSize:"0.75rem",marginTop:8,padding:"4px"}}>
+          Not now — remind me later
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function HabitsPanel({habits,theme,onAdd,onToggleDay,onDelete,onSetGoals}){
+  const [showModal,setShowModal]=useState(false);
+  const [showReview,setShowReview]=useState(false);
+  const [form,setForm]=useState({title:"",frequency:"daily",daysOfWeek:[0,1,2,3,4,5,6],weeklyTarget:null});
+  const today=todayStr(),todayDow=new Date().getDay();
+  const relevant=habits.filter(h=>h.frequency==="daily"||(h.daysOfWeek||[]).includes(todayDow));
+  const doneToday=relevant.filter(h=>h.completions?.[today]).length;
+  const save=()=>{if(!form.title.trim())return;onAdd({...form,id:genId(),title:form.title.trim(),completions:{},monthlyGoals:{},weeklyTarget:form.weeklyTarget||null});setForm({title:"",frequency:"daily",daysOfWeek:[0,1,2,3,4,5,6]});setShowModal(false);};
+  const toggleDow=dow=>setForm(f=>({...f,daysOfWeek:f.daysOfWeek.includes(dow)?f.daysOfWeek.filter(d=>d!==dow):[...f.daysOfWeek,dow]}));
+  return(
+    <div style={{background:theme.panel,border:`1px solid ${theme.border}`,borderRadius:10,padding:14}}>
+      <SectionHeader title={`Daily Habits · ${doneToday}/${relevant.length}`} accent={theme.accent} action={
+        <div style={{display:"flex",gap:6}}>
+          <button onClick={()=>setShowReview(true)} style={{background:`${theme.accent}22`,border:`1px solid ${theme.accent}44`,borderRadius:6,color:theme.accent,fontSize:"0.72rem",fontWeight:700,padding:"4px 8px",cursor:"pointer"}}>📊 Goals</button>
+          <button onClick={()=>setShowModal(true)} style={{background:theme.accent,border:"none",borderRadius:6,color:"#000",fontSize:"0.75rem",fontWeight:700,padding:"4px 10px",cursor:"pointer"}}>+ Add</button>
+        </div>
+      }/>
+      <div style={{height:4,background:theme.bg,borderRadius:4,marginBottom:10}}>
+        <div style={{height:"100%",background:theme.accent,borderRadius:4,width:relevant.length?`${(doneToday/relevant.length)*100}%`:"0%",transition:"width 0.4s"}}/>
+      </div>
+      {/* Monthly goal progress per habit */}
+      {relevant.length>0&&(
+        <div style={{display:"flex",flexDirection:"column",gap:3,marginBottom:8}}>
+          {relevant.map(h=>{
+            const mk=monthKey();
+            const goal=getHabitGoal(h,mk);
+            const rate=calcHabitMonthRate(h,mk)??0;
+            const color=rate>=goal?"#22c55e":rate>=goal*0.8?"#f59e0b":"#ef4444";
+            return(
+              <div key={h.id+"-goal"} style={{display:"flex",alignItems:"center",gap:8}}>
+                <div style={{width:110,flexShrink:0}}>
+                  <div style={{fontSize:"0.62rem",color:theme.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{h.title}</div>
+                  {h.weeklyTarget&&<div style={{fontSize:"0.55rem",color:theme.muted,opacity:0.7}}>goal: {h.weeklyTarget}x/wk</div>}
+                </div>
+                <div style={{flex:1,height:4,background:theme.bg,borderRadius:4}}>
+                  <div style={{height:"100%",background:color,borderRadius:4,width:`${Math.min(100,rate)}%`,transition:"width 0.4s"}}/>
+                </div>
+                <span style={{fontSize:"0.62rem",color:color,width:56,textAlign:"right",flexShrink:0}}>
+                  {h.weeklyTarget
+                    ? `${rate}%`
+                    : `${rate}%/${goal}%`}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {relevant.length===0?<p style={{color:theme.muted,fontSize:"0.8rem",textAlign:"center",padding:"8px 0"}}>No habits today. That tracks. Add one whenever the motivation strikes.</p>:(
+        <div style={{display:"flex",flexDirection:"column",gap:5}}>
+          {relevant.map(h=>{const done=!!h.completions?.[today];return(
+            <div key={h.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 8px",background:theme.bg,borderRadius:7}}>
+              <button onClick={()=>onToggleDay(h.id,today)} style={{width:22,height:22,border:`2px solid ${done?theme.accent:theme.muted}`,borderRadius:6,background:done?theme.accent:"transparent",cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",color:"#000",fontSize:"0.8rem",fontWeight:700,padding:0,transition:"all 0.2s"}}>{done?"✓":""}</button>
+              <span style={{flex:1,fontSize:"0.85rem",color:theme.text,textDecoration:done?"line-through":"none",opacity:done?0.5:1}}>{h.title}</span>
+              <span style={{fontSize:"0.63rem",color:theme.muted,flexShrink:0}}>{h.frequency==="daily"?"Daily":h.daysOfWeek?.map(d=>DAYS[d]).join(" ")}</span>
+              <button onClick={()=>onDelete(h.id)} style={{background:"none",border:"none",color:theme.muted,cursor:"pointer",fontSize:"0.8rem",opacity:0.5,flexShrink:0}}>✕</button>
+            </div>
+          );})}
+        </div>
+      )}
+      {showReview&&(
+        <MonthlyReviewModal habits={habits} theme={theme}
+          onClose={()=>setShowReview(false)}
+          onSetGoal={goals=>{
+            const updated=habits.map(h=>({...h,monthlyGoals:{...h.monthlyGoals||{},[monthKey()]:goals[h.id]}}));
+            onSetGoals(updated);
+          }}
+        />
+      )}
+      {showModal&&(
+        <Modal title="Add Habit" onClose={()=>setShowModal(false)} theme={theme}>
+          <Inp label="Habit Name" value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="e.g. Stretch before bed"/>
+          <Inp label="Frequency" as="select" value={form.frequency} onChange={e=>setForm({...form,frequency:e.target.value})}>
+            <option value="daily">Daily</option><option value="weekly">Specific Days</option>
+          </Inp>
+          {form.frequency==="weekly"&&(
+            <div style={{marginBottom:12}}>
+              <label style={{display:"block",fontSize:"0.73rem",color:"#94a3b8",marginBottom:6}}>Days</label>
+              <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                {DAYS.map((d,i)=><button key={i} onClick={()=>toggleDow(i)} style={{padding:"4px 8px",borderRadius:6,border:`1px solid ${form.daysOfWeek.includes(i)?theme.accent:theme.border}`,background:form.daysOfWeek.includes(i)?`${theme.accent}22`:"transparent",color:form.daysOfWeek.includes(i)?theme.accent:theme.muted,cursor:"pointer",fontSize:"0.75rem"}}>{d}</button>)}
+              </div>
+            </div>
+          )}
+          <div style={{marginBottom:12}}>
+            <label style={{display:"block",fontSize:"0.73rem",color:"#94a3b8",marginBottom:6}}>Weekly Target (optional)</label>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <div style={{display:"flex",gap:4}}>
+                {[null,1,2,3,4,5,6,7].map(n=>(
+                  <button key={String(n)} onClick={()=>setForm(f=>({...f,weeklyTarget:n}))}
+                    style={{padding:"4px 8px",borderRadius:6,border:`1.5px solid ${form.weeklyTarget===n?theme.accent:theme.border}`,background:form.weeklyTarget===n?`${theme.accent}22`:"transparent",color:form.weeklyTarget===n?theme.accent:theme.muted,cursor:"pointer",fontSize:"0.73rem",fontWeight:form.weeklyTarget===n?700:400}}>
+                    {n===null?"Any":n+"x"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {form.weeklyTarget&&<div style={{fontSize:"0.68rem",color:theme.muted,marginTop:4}}>Goal: hit this habit {form.weeklyTarget}x per week</div>}
+          </div>
+          <button onClick={save} style={{width:"100%",background:theme.accent,border:"none",borderRadius:8,padding:"10px",color:"#000",fontWeight:700,cursor:"pointer",fontSize:"0.9rem",marginTop:4}}>Save Habit</button>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ─── STEP EDITOR ─────────────────────────────────────────────────────────────
+function StepEditor({steps,type,theme,onChange}){
+  const addStep=()=>onChange([...steps,{id:genId(),title:"",energy:"medium",mins:30,done:false,notes:""}]);
+  const update=(id,f,v)=>onChange(steps.map(s=>s.id===id?{...s,[f]:v}:s));
+  const remove=id=>onChange(steps.filter(s=>s.id!==id));
+  const move=(idx,dir)=>{const a=[...steps],t=idx+dir;if(t<0||t>=a.length)return;[a[idx],a[t]]=[a[t],a[idx]];onChange(a);};
+  return(
+    <div style={{marginBottom:12}}>
+      <label style={{display:"block",fontSize:"0.73rem",color:"#94a3b8",marginBottom:6}}>{type==="linear"?"Steps (ordered)":"Tasks (any order)"}</label>
+      <div style={{display:"flex",flexDirection:"column",gap:6}}>
+        {steps.map((s,idx)=>(
+          <div key={s.id} style={{background:theme.bg,borderRadius:8,padding:"10px",border:`1px solid ${theme.border}`}}>
+            <div style={{display:"flex",gap:6,marginBottom:6}}>
+              {type==="linear"&&(
+                <div style={{display:"flex",flexDirection:"column",gap:2,flexShrink:0}}>
+                  <button onClick={()=>move(idx,-1)} disabled={idx===0} style={{background:"none",border:`1px solid ${theme.border}`,borderRadius:4,color:theme.muted,cursor:idx===0?"not-allowed":"pointer",fontSize:"0.65rem",padding:"0 5px",opacity:idx===0?0.3:1}}>▲</button>
+                  <button onClick={()=>move(idx,1)} disabled={idx===steps.length-1} style={{background:"none",border:`1px solid ${theme.border}`,borderRadius:4,color:theme.muted,cursor:idx===steps.length-1?"not-allowed":"pointer",fontSize:"0.65rem",padding:"0 5px",opacity:idx===steps.length-1?0.3:1}}>▼</button>
+                </div>
+              )}
+              <input value={s.title} onChange={e=>update(s.id,"title",e.target.value)} placeholder={`Step ${idx+1}…`}
+                style={{flex:1,background:"#1a2540",border:"1px solid #2d3f5a",borderRadius:6,padding:"6px 8px",color:"#e2e8f0",fontSize:"0.82rem",minWidth:0}}/>
+              <button onClick={()=>remove(s.id)} style={{background:"none",border:"none",color:"#64748b",cursor:"pointer",fontSize:"0.9rem",flexShrink:0,padding:"0 4px"}}>✕</button>
+            </div>
+            <div style={{display:"flex",gap:6}}>
+              <select value={s.energy} onChange={e=>update(s.id,"energy",e.target.value)}
+                style={{flex:1,background:"#1a2540",border:"1px solid #2d3f5a",borderRadius:6,padding:"5px 6px",color:ENERGY_COLORS[s.energy],fontSize:"0.75rem"}}>
+                <option value="low">🔵 Low effort</option>
+                <option value="medium">🟠 Moderate</option>
+                <option value="high">🔴 High focus</option>
+              </select>
+              <select value={s.mins} onChange={e=>update(s.id,"mins",Number(e.target.value))}
+                style={{flex:1,background:"#1a2540",border:"1px solid #2d3f5a",borderRadius:6,padding:"5px 6px",color:"#e2e8f0",fontSize:"0.75rem"}}>
+                {TIME_SLOTS.map(t=><option key={t} value={t}>{fmtMins(t)}</option>)}
+              </select>
+            </div>
+          </div>
+        ))}
+        <button onClick={addStep} style={{background:"transparent",border:`1px dashed ${theme.border}`,borderRadius:8,padding:"8px",color:theme.muted,cursor:"pointer",fontSize:"0.8rem",textAlign:"center"}}>+ Add step</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── WHAT CAN I DO ────────────────────────────────────────────────────────────
+function WhatCanIDoModal({projects,theme,onClose,onAddToTodo}){
+  const [availMins,setAvailMins]=useState(60);
+  const active=projects.filter(p=>p.status==="active");
+  const suggestions=active.flatMap(p=>{
+    if(p.type==="linear"){const next=p.steps.find(s=>!s.done);return next&&next.mins<=availMins?[{project:p,step:next,isNext:true}]:[];}
+    return p.steps.filter(s=>!s.done&&s.mins<=availMins).map(s=>({project:p,step:s,isNext:false}));
+  }).sort((a,b)=>a.step.mins-b.step.mins);
+  const low=suggestions.filter(s=>s.step.energy==="low"),med=suggestions.filter(s=>s.step.energy==="medium"),hi=suggestions.filter(s=>s.step.energy==="high");
+  const Card=({item})=>(
+    <div style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 12px",background:theme.bg,borderRadius:8,borderLeft:`3px solid ${item.project.color||theme.accent}`}}>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+          <span style={{fontSize:"0.7rem",fontWeight:700,color:item.project.color||theme.accent,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.project.title}</span>
+          {item.isNext&&<span style={{fontSize:"0.6rem",background:`${theme.accent}22`,color:theme.accent,padding:"1px 5px",borderRadius:4,flexShrink:0}}>NEXT</span>}
+        </div>
+        <div style={{fontSize:"0.83rem",color:theme.text,marginBottom:4,lineHeight:1.35}}>{item.step.title}</div>
+        <div style={{display:"flex",gap:8}}>
+          <span style={{fontSize:"0.68rem",color:ENERGY_COLORS[item.step.energy]}}>{ENERGY_LABELS[item.step.energy]}</span>
+          <span style={{fontSize:"0.68rem",color:theme.muted}}>⏱ {fmtMins(item.step.mins)}</span>
+        </div>
+      </div>
+      <button onClick={()=>onAddToTodo({id:genId(),title:`[${item.project.title}] ${item.step.title}`,priority:"medium",dueDate:"",dueTime:"",completed:false})}
+        style={{background:item.project.color||theme.accent,border:"none",borderRadius:6,padding:"5px 10px",color:"#000",fontSize:"0.72rem",fontWeight:700,cursor:"pointer",flexShrink:0}}>+ To-Do</button>
+    </div>
+  );
+  const Sec=({label,items})=>items.length===0?null:(
+    <div style={{marginBottom:14}}>
+      <div style={{fontSize:"0.7rem",fontWeight:700,color:theme.muted,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:6}}>{label}</div>
+      <div style={{display:"flex",flexDirection:"column",gap:6}}>{items.map((item,i)=><Card key={i} item={item}/>)}</div>
+    </div>
+  );
+  return(
+    <Modal title="What can I work on?" onClose={onClose} theme={theme}>
+      <div style={{marginBottom:16}}>
+        <label style={{display:"block",fontSize:"0.73rem",color:"#94a3b8",marginBottom:8}}>How much free time?</label>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          {[15,30,45,60,90,120].map(m=>(
+            <button key={m} onClick={()=>setAvailMins(m)} style={{padding:"6px 12px",borderRadius:7,border:`1.5px solid ${availMins===m?theme.accent:theme.border}`,background:availMins===m?`${theme.accent}22`:"transparent",color:availMins===m?theme.accent:theme.muted,cursor:"pointer",fontSize:"0.78rem",fontWeight:availMins===m?700:400}}>{fmtMins(m)}</button>
+          ))}
+        </div>
+      </div>
+      {suggestions.length===0
+        ?<div style={{textAlign:"center",padding:"20px 0",color:theme.muted,fontSize:"0.85rem"}}>No steps fit in {fmtMins(availMins)}.<br/>Try a longer window.</div>
+        :<><Sec label="Low effort — just get it done" items={low}/><Sec label="Moderate effort" items={med}/><Sec label="High focus — bring your A-game" items={hi}/></>}
+    </Modal>
+  );
+}
+
+// ─── PROJECTS PANEL ───────────────────────────────────────────────────────────
+function ProjectsPanel({projects,theme,onSave,onDeleteProject,onMarkStepDone,onAddToTodo}){
+  const [expanded,setExpanded]=useState(null);
+  const [showNew,setShowNew]=useState(false);
+  const [showEdit,setShowEdit]=useState(null);
+  const [showWhat,setShowWhat]=useState(false);
+  const [form,setForm]=useState({title:"",description:"",type:"linear",color:PROJECT_COLORS[0],status:"active",steps:[]});
+  const active=projects.filter(p=>p.status==="active"),paused=projects.filter(p=>p.status==="paused"),done=projects.filter(p=>p.status==="complete");
+  const openNew=()=>{setForm({title:"",description:"",type:"linear",color:PROJECT_COLORS[Math.floor(Math.random()*PROJECT_COLORS.length)],status:"active",nudgeDays:null,steps:[]});setShowNew(true);setShowEdit(null);};
+  const openEdit=p=>{setForm({...p,nudgeDays:p.nudgeDays||null,steps:[...p.steps.map(s=>({...s}))]});setShowEdit(p.id);setShowNew(false);};
+  const saveForm=()=>{
+    if(!form.title.trim())return;
+    if(showEdit){onSave(projects.map(p=>p.id===showEdit?{...form,id:p.id}:p));setShowEdit(null);}
+    else{onSave([...projects,{...form,id:genId()}]);setShowNew(false);}
+  };
+  const progressOf=p=>!p.steps.length?0:Math.round((p.steps.filter(s=>s.done).length/p.steps.length)*100);
+  const nextStepOf=p=>p.type==="linear"?p.steps.find(s=>!s.done)||null:p.steps.filter(s=>!s.done)[0]||null;
+
+  const FormContent=()=>(
+    <>
+      <Inp label="Project Name" value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="e.g. Learn Spanish"/>
+      <Inp label="Description (optional)" as="textarea" value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="What is this about?"/>
+      <div style={{marginBottom:12}}>
+        <label style={{display:"block",fontSize:"0.73rem",color:"#94a3b8",marginBottom:6}}>Color</label>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{PROJECT_COLORS.map(c=><button key={c} onClick={()=>setForm({...form,color:c})} style={{width:24,height:24,borderRadius:"50%",background:c,border:`3px solid ${form.color===c?"#fff":"transparent"}`,cursor:"pointer",padding:0}}/>)}</div>
+      </div>
+      <div style={{marginBottom:12}}>
+        <label style={{display:"block",fontSize:"0.73rem",color:"#94a3b8",marginBottom:6}}>Type</label>
+        <div style={{display:"flex",gap:6}}>
+          {[["linear","📋 Linear"],["flexible","🎯 Flexible"]].map(([v,l])=>(
+            <button key={v} onClick={()=>setForm({...form,type:v})} style={{flex:1,padding:"8px 6px",borderRadius:7,border:`1.5px solid ${form.type===v?theme.accent:theme.border}`,background:form.type===v?`${theme.accent}11`:"transparent",color:form.type===v?theme.accent:theme.muted,cursor:"pointer",fontSize:"0.78rem",textAlign:"center"}}>{l}</button>
+          ))}
+        </div>
+      </div>
+      <Inp label="Status" as="select" value={form.status} onChange={e=>setForm({...form,status:e.target.value})}>
+        <option value="active">Active</option><option value="paused">Paused</option><option value="complete">Complete</option>
+      </Inp>
+      <div style={{marginBottom:12}}>
+        <label style={{display:"block",fontSize:"0.73rem",color:"#94a3b8",marginBottom:6}}>Inactivity Nudge</label>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          <div style={{display:"flex",gap:4}}>
+            {[null,2,3,5,7,14].map(d=>(
+              <button key={String(d)} onClick={()=>setForm({...form,nudgeDays:d})}
+                style={{padding:"5px 9px",borderRadius:6,border:`1.5px solid ${form.nudgeDays===d?theme.accent:theme.border}`,background:form.nudgeDays===d?`${theme.accent}22`:"transparent",color:form.nudgeDays===d?theme.accent:theme.muted,cursor:"pointer",fontSize:"0.73rem",fontWeight:form.nudgeDays===d?700:400}}>
+                {d===null?"Off":`${d}d`}
+              </button>
+            ))}
+          </div>
+        </div>
+        {form.nudgeDays&&<div style={{fontSize:"0.68rem",color:theme.muted,marginTop:4}}>Reminder fires if no progress for {form.nudgeDays} days</div>}
+      </div>
+      <StepEditor steps={form.steps} type={form.type} theme={theme} onChange={steps=>setForm({...form,steps})}/>
+      <button onClick={saveForm} style={{width:"100%",background:theme.accent,border:"none",borderRadius:8,padding:"10px",color:"#000",fontWeight:700,cursor:"pointer",fontSize:"0.9rem",marginTop:4}}>{showEdit?"Save Changes":"Create Project"}</button>
+    </>
+  );
+
+  const ProjectCard=({p})=>{
+    const pct=progressOf(p),next=nextStepOf(p),isOpen=expanded===p.id,remaining=p.steps.filter(s=>!s.done).length;
+    return(
+      <div style={{background:theme.bg,borderRadius:9,border:`1px solid ${theme.border}`,overflow:"hidden"}}>
+        <div onClick={()=>setExpanded(isOpen?null:p.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",cursor:"pointer"}}>
+          <div style={{width:10,height:10,borderRadius:"50%",background:p.color,flexShrink:0}}/>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <span style={{fontSize:"0.88rem",fontWeight:700,color:theme.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.title}</span>
+              <span style={{fontSize:"0.63rem",padding:"1px 6px",borderRadius:4,background:p.status==="active"?`${theme.accent}22`:p.status==="paused"?"#f9741622":"#22c55e22",color:p.status==="active"?theme.accent:p.status==="paused"?"#f97416":"#22c55e",flexShrink:0,textTransform:"capitalize"}}>{p.status}</span>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginTop:4}}>
+              <div style={{flex:1,height:4,background:theme.panel,borderRadius:4}}><div style={{height:"100%",background:p.color,borderRadius:4,width:`${pct}%`,transition:"width 0.4s"}}/></div>
+              <span style={{fontSize:"0.68rem",color:theme.muted,flexShrink:0}}>{pct}% · {remaining} left</span>
+            </div>
+          </div>
+          <button onClick={e=>{e.stopPropagation();openEdit(p);}} style={{background:"none",border:`1px solid ${theme.border}`,borderRadius:6,color:theme.muted,cursor:"pointer",fontSize:"0.7rem",padding:"3px 7px",flexShrink:0}}>Edit</button>
+          <span style={{color:theme.muted,fontSize:"0.8rem",flexShrink:0}}>{isOpen?"▲":"▼"}</span>
+        </div>
+        {!isOpen&&next&&p.status==="active"&&(
+          <div style={{padding:"0 12px 10px",display:"flex",alignItems:"center",gap:8}}>
+            <div style={{flex:1,padding:"7px 10px",background:theme.panel,borderRadius:7,borderLeft:`2px solid ${p.color}`}}>
+              <div style={{fontSize:"0.7rem",color:theme.muted,marginBottom:2}}>Next up</div>
+              <div style={{fontSize:"0.8rem",color:theme.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{next.title}</div>
+              <div style={{display:"flex",gap:8,marginTop:3}}>
+                <span style={{fontSize:"0.66rem",color:ENERGY_COLORS[next.energy]}}>{ENERGY_LABELS[next.energy]}</span>
+                <span style={{fontSize:"0.66rem",color:theme.muted}}>⏱ {fmtMins(next.mins)}</span>
+              </div>
+            </div>
+            <button onClick={()=>onMarkStepDone(p.id,next.id)} style={{background:p.color,border:"none",borderRadius:7,padding:"8px 10px",color:"#000",fontSize:"0.72rem",fontWeight:700,cursor:"pointer",flexShrink:0,lineHeight:1.3,textAlign:"center"}}>Mark<br/>Done</button>
+          </div>
+        )}
+        {isOpen&&(
+          <div style={{padding:"0 12px 12px"}}>
+            {p.description&&<div style={{fontSize:"0.78rem",color:theme.muted,marginBottom:10,fontStyle:"italic"}}>{p.description}</div>}
+            <div style={{display:"flex",flexDirection:"column",gap:5}}>
+              {p.steps.map((s,idx)=>{
+                const isNext=p.type==="linear"&&!s.done&&p.steps.slice(0,idx).every(prev=>prev.done);
+                const locked=p.type==="linear"&&!s.done&&idx>0&&!p.steps[idx-1].done;
+                return(
+                  <div key={s.id} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"8px 10px",background:theme.panel,borderRadius:7,opacity:locked?0.4:1,borderLeft:`2px solid ${s.done?"#22c55e":isNext?p.color:theme.border}`}}>
+                    <button onClick={()=>!locked&&onMarkStepDone(p.id,s.id)} disabled={locked||s.done}
+                      style={{width:20,height:20,border:`2px solid ${s.done?"#22c55e":isNext?p.color:theme.muted}`,borderRadius:5,background:s.done?"#22c55e":"transparent",cursor:locked||s.done?"default":"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",color:"#000",fontSize:"0.75rem",fontWeight:700,padding:0,marginTop:1}}>
+                      {s.done?"✓":""}
+                    </button>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:"0.82rem",color:s.done?theme.muted:theme.text,textDecoration:s.done?"line-through":"none",lineHeight:1.35}}>{s.title}</div>
+                      <div style={{display:"flex",gap:8,marginTop:3}}>
+                        <span style={{fontSize:"0.66rem",color:s.done?theme.muted:ENERGY_COLORS[s.energy]}}>{ENERGY_LABELS[s.energy]}</span>
+                        <span style={{fontSize:"0.66rem",color:theme.muted}}>⏱ {fmtMins(s.mins)}</span>
+                        {isNext&&<span style={{fontSize:"0.62rem",background:`${p.color}22`,color:p.color,padding:"1px 5px",borderRadius:4}}>NEXT</span>}
+                        {locked&&<span style={{fontSize:"0.62rem",color:theme.muted}}>🔒 Complete previous first</span>}
+                      </div>
+                    </div>
+                    {!s.done&&!locked&&(
+                      <button onClick={()=>onAddToTodo({id:genId(),title:`[${p.title}] ${s.title}`,priority:"medium",dueDate:"",dueTime:"",completed:false})}
+                        style={{background:"none",border:`1px solid ${theme.border}`,borderRadius:6,color:theme.muted,cursor:"pointer",fontSize:"0.65rem",padding:"3px 6px",flexShrink:0,whiteSpace:"nowrap"}}>+ To-Do</button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <button onClick={()=>onDeleteProject(p.id)} style={{marginTop:10,background:"none",border:"1px solid #ef444433",borderRadius:6,color:"#ef4444",cursor:"pointer",fontSize:"0.72rem",padding:"4px 10px",opacity:0.7}}>Delete project</button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return(
+    <div style={{background:theme.panel,border:`1px solid ${theme.border}`,borderRadius:10,padding:14}}>
+      <SectionHeader title="Projects" accent={theme.accent} action={
+        <div style={{display:"flex",gap:6}}>
+          <button onClick={()=>setShowWhat(true)} style={{background:`${theme.accent}22`,border:`1px solid ${theme.accent}44`,borderRadius:6,color:theme.accent,fontSize:"0.75rem",fontWeight:700,padding:"4px 10px",cursor:"pointer"}}>⚡ What can I do?</button>
+          <button onClick={openNew} style={{background:theme.accent,border:"none",borderRadius:6,color:"#000",fontSize:"0.75rem",fontWeight:700,padding:"4px 10px",cursor:"pointer"}}>+ New</button>
+        </div>
+      }/>
+      {projects.length===0&&<p style={{color:theme.muted,fontSize:"0.8rem",textAlign:"center",padding:"10px 0"}}>No projects. Pure potential. Unused potential. Add one.</p>}
+      {active.length>0&&<div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:8}}>{active.map(p=><ProjectCard key={p.id} p={p}/>)}</div>}
+      {paused.length>0&&(<div style={{marginBottom:8}}><div style={{fontSize:"0.68rem",color:theme.muted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Paused</div><div style={{display:"flex",flexDirection:"column",gap:8}}>{paused.map(p=><ProjectCard key={p.id} p={p}/>)}</div></div>)}
+      {done.length>0&&(<div><div style={{fontSize:"0.68rem",color:theme.muted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Completed</div><div style={{display:"flex",flexDirection:"column",gap:8}}>{done.map(p=><ProjectCard key={p.id} p={p}/>)}</div></div>)}
+      {(showNew||showEdit)&&(<Modal title={showEdit?"Edit Project":"New Project"} onClose={()=>{setShowNew(false);setShowEdit(null);}} theme={theme}><FormContent/></Modal>)}
+      {showWhat&&<WhatCanIDoModal projects={projects} theme={theme} onClose={()=>setShowWhat(false)} onAddToTodo={t=>{onAddToTodo(t);setShowWhat(false);}}/>}
+    </div>
+  );
+}
+
+// ─── SETTINGS PANEL ───────────────────────────────────────────────────────────
+function SettingsPanel({settings,theme,onSave,onClose}){
+  const [form,setForm]=useState({...settings});
+  return(
+    <div style={{background:theme.panel,border:`1px solid ${theme.border}`,borderRadius:10,padding:14}}>
+      <SectionHeader title="Settings" accent={theme.accent} action={<button onClick={onClose} style={{background:"none",border:"none",color:theme.muted,cursor:"pointer",fontSize:"1rem"}}>✕</button>}/>
+      <Inp label="Your Name" value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Tony"/>
+      <Inp label="Anthropic API Key (for Assistant chat)" type="password" value={form.apiKey||""} onChange={e=>setForm({...form,apiKey:e.target.value})} placeholder="sk-ant-..."/>
+      <div style={{fontSize:"0.68rem",color:"#64748b",marginBottom:12,marginTop:-8}}>Get a free key at console.anthropic.com — stored locally only, never sent anywhere except Anthropic.</div>
+      <div style={{marginBottom:12}}>
+        <label style={{display:"block",fontSize:"0.73rem",color:"#94a3b8",marginBottom:6}}>Theme</label>
+        <div style={{display:"flex",gap:6}}>
+          {Object.keys(THEMES).map(t=>(
+            <button key={t} onClick={()=>setForm({...form,theme:t})} style={{flex:1,padding:"7px 4px",borderRadius:7,border:`1.5px solid ${form.theme===t?theme.accent:theme.border}`,background:THEMES[t].bg,color:THEMES[t].text,cursor:"pointer",fontSize:"0.72rem",fontWeight:form.theme===t?700:400,textTransform:"capitalize"}}>{t}</button>
+          ))}
+        </div>
+      </div>
+      <div style={{marginBottom:14}}>
+        <label style={{display:"block",fontSize:"0.73rem",color:"#94a3b8",marginBottom:6}}>Accent Color</label>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          {ACCENT_OPTIONS.map(c=><button key={c} onClick={()=>setForm({...form,accent:c})} style={{width:28,height:28,borderRadius:"50%",background:c,border:`3px solid ${form.accent===c?"#fff":"transparent"}`,cursor:"pointer",padding:0,transition:"border 0.15s"}}/>)}
+        </div>
+      </div>
+      <button onClick={()=>onSave(form)} style={{width:"100%",background:theme.accent,border:"none",borderRadius:8,padding:"10px",color:"#000",fontWeight:700,cursor:"pointer",fontSize:"0.9rem"}}>Save Settings</button>
+    </div>
+  );
+}
+
+// ─── MAIN APP ─────────────────────────────────────────────────────────────────
+
+// ─── ASSISTANT CHAT ───────────────────────────────────────────────────────────
+function buildSystemPrompt(data, weatherRef){
+  const today = new Date();
+  const todayS = todayStr();
+  const todayDow = today.getDay();
+  const todayEvents = (data.events||[]).filter(e=>e.date===todayS).sort((a,b)=>(a.time||"").localeCompare(b.time||""));
+  const upcomingEvents = (data.events||[]).filter(e=>e.date>todayS).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,8);
+  const activeTodos = (data.todos||[]).filter(t=>!t.completed).slice(0,10);
+  const activeProjects = (data.projects||[]).filter(p=>p.status==="active");
+  const todayHabits = (data.habits||[]).filter(h=>h.frequency==="daily"||(h.daysOfWeek||[]).includes(todayDow));
+  const habitsDoneToday = todayHabits.filter(h=>h.completions?.[todayS]);
+  const rewards = data.rewards||{};
+  const level = calcLevel(rewards.xp||0);
+
+  const fmtEvent = e => e.title+(e.time?" at "+formatTime(e.time):"")+(e.notes?" ("+e.notes+")":"");
+  const fmtTodo = t => t.title+" ["+t.priority+(t.dueDate?" due "+formatDate(t.dueDate):"")+"]";
+  const fmtProject = p => {
+    const next = p.type==="linear"?p.steps.find(s=>!s.done):p.steps.filter(s=>!s.done)[0];
+    const done = p.steps.filter(s=>s.done).length;
+    return p.title+" ("+done+"/"+p.steps.length+" steps done"+(next?", next: "+next.title:"")+")";
+  };
+  const fmtHabit = h => (h.completions?.[todayS]?"[DONE] ":"[    ] ")+h.title+(h.weeklyTarget?" (goal: "+h.weeklyTarget+"x/wk)":"");
+
+  const lines = [
+    "You are the personal assistant AI built into Tony's Command Center dashboard.",
+    "Personality: dry, competent, occasionally sardonic, genuinely helpful. Somewhere between Jarvis (Iron Man), Claptrap (Borderlands), and the AI from Dungeon Crawler Carl.",
+    "Swear occasionally for emphasis — not constantly. Never sycophantic. Get to the point.",
+    "",
+    "TODAY: "+today.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"}),
+    "",
+    "TODAY SCHEDULE: "+(todayEvents.length?todayEvents.map(fmtEvent).join(" | "):"Nothing scheduled"),
+    "UPCOMING (next 8): "+(upcomingEvents.length?upcomingEvents.map(e=>formatDate(e.date)+": "+fmtEvent(e)).join(" | "):"None"),
+    "TODOS ("+activeTodos.length+" active): "+(activeTodos.length?activeTodos.map(fmtTodo).join(" | "):"All clear"),
+    "PROJECTS: "+(activeProjects.length?activeProjects.map(fmtProject).join(" | "):"None"),
+    "HABITS today ("+habitsDoneToday.length+"/"+todayHabits.length+"): "+(todayHabits.length?todayHabits.map(fmtHabit).join(" | "):"None"),
+    "REWARDS: Level "+level+", "+( rewards.xp||0)+" XP, streak: "+(rewards.currentStreak||0)+" days",
+    weatherRef?"WEATHER: "+weatherRef:"",
+    "",
+    "TONY CONTEXT: Pediatrician at Woodcreek (4 days/wk). Plays for the Pilots baseball team. Tuesday run club. Rock climbs, lifts. Learning Spanish. ADHD. DIY car soundproofing (2024 Civic Sport Touring). Fantasy football, gaming, Seinfeld, Dungeon Crawler Carl. University Place WA.",
+    "",
+    "When Tony wants to add something, help him think it through then tell him what to add and where.",
+    "Keep responses concise — mobile screen. Morning briefing = sharp structured day rundown.",
+  ];
+
+  return lines.filter(l=>l!==null).join("\n");
+}
+
+
+function AssistantChat({data, theme}){
+  const [open, setOpen] = useState(false);
+  const [msgs, setMsgs] = useState([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const [weatherCache, setWeatherCache] = useState(null);
+  const bottomRef = useRef(null);
+  const inputRef = useRef(null);
+
+  useEffect(()=>{
+    if(open && msgs.length===0){
+      const h = new Date().getHours();
+      const opener = h<12
+        ? "Morning. I've got your full dashboard loaded. What do you need, or want me to brief you on today?"
+        : h<17
+        ? "Hey. Dashboard is loaded. What's on your mind?"
+        : "Evening. I know what's on your schedule. What do you need?";
+      setMsgs([{role:"assistant", content:opener}]);
+      setTimeout(()=>inputRef.current?.focus(), 100);
+    }
+  },[open]);
+
+  useEffect(()=>{
+    bottomRef.current?.scrollIntoView({behavior:"smooth"});
+  },[msgs]);
+
+  const speak = (text) => {
+    if(!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const clean = text.replace(/[*_#`]/g,"").replace(/\n+/g," ").replace(/\s+/g," ").slice(0,800);
+    const utt = new SpeechSynthesisUtterance(clean);
+    utt.rate = 1.05; utt.pitch = 0.95;
+    const voices = window.speechSynthesis.getVoices();
+    const pref = voices.find(v=>v.name.includes("Daniel")||v.name.includes("Alex")||v.name.includes("Google US")||v.lang==="en-US");
+    if(pref) utt.voice = pref;
+    utt.onstart = ()=>setSpeaking(true);
+    utt.onend = ()=>setSpeaking(false);
+    utt.onerror = ()=>setSpeaking(false);
+    window.speechSynthesis.speak(utt);
+  };
+
+  const stopSpeaking = () => { window.speechSynthesis?.cancel(); setSpeaking(false); };
+
+  const buildBriefingRequest = () => {
+    const h = new Date().getHours();
+    if(h < 12) return "Give me my full morning briefing. Cover today's schedule, habit goals, any urgent todos, project next steps, and anything else I should know to start the day right. Keep it sharp.";
+    if(h < 17) return "Give me a midday status check. What have I got left today, what's coming up, anything urgent?";
+    return "Give me an evening wind-down summary. What did I have today, what's tomorrow looking like, anything I should handle before bed?";
+  };
+
+  const send = async (text) => {
+    if(!text.trim()||loading) return;
+    const userMsg = {role:"user", content:text};
+    const newMsgs = [...msgs, userMsg];
+    setMsgs(newMsgs);
+    setInput("");
+    setLoading(true);
+
+    // Grab weather quietly in background for context
+    let wxContext = weatherCache;
+    if(!wxContext && navigator.geolocation){
+      try{
+        await new Promise((res)=>navigator.geolocation.getCurrentPosition(async pos=>{
+          try{
+            const r=await fetch("https://api.open-meteo.com/v1/forecast?latitude="+pos.coords.latitude+"&longitude="+pos.coords.longitude+"&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto");
+            const d=await r.json();
+            const c=d.current;
+            wxContext=Math.round(c.temperature_2m)+"F, feels like "+Math.round(c.apparent_temperature)+"F, wind "+Math.round(c.wind_speed_10m)+"mph";
+            setWeatherCache(wxContext);
+          }catch(ex){console.log("wx skip",ex);}
+          res();
+        },()=>res(),{timeout:3000}));
+      }catch(ex){console.log("geo skip",ex);}
+    }
+
+    try{
+      const sysprompt = buildSystemPrompt(data, wxContext);
+      const apiMsgs = newMsgs.slice(-12).map(m=>({role:m.role, content:m.content}));
+      // Sanitize system prompt — remove any chars that break JSON
+      const cleanSystem = sysprompt.replace(/[\u0000-\u001F\u007F]/g, " ").replace(/\\/g, "\\\\");
+      // Keep messages simple — just role + string content
+      const cleanMsgs = apiMsgs.map(m=>({
+        role: m.role==="user"?"user":"assistant",
+        content: String(m.content).replace(/[\u0000-\u001F\u007F]/g," ")
+      }));
+      const bodyStr = JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 1000,
+        system: cleanSystem,
+        messages: cleanMsgs,
+      });
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": (data.settings&&data.settings.apiKey)||"", "anthropic-version": "2023-06-01" },
+        body: bodyStr,
+      });
+      const json = await response.json();
+      if(json.error){ throw new Error(json.error.message||JSON.stringify(json.error)); }
+      const blocks = (json.content||[]).filter(b=>b.type==="text");
+      const reply = blocks.map(b=>b.text).join("\n").trim() || "Nothing came back — try again.";
+      setMsgs(m=>[...m,{role:"assistant",content:reply}]);
+    }catch(e){
+      console.error("Chat error:", e);
+      // Show full error detail for debugging
+      setMsgs(m=>[...m,{role:"assistant",content:"Error: "+(e.message||String(e))}]);
+    }
+    setLoading(false);
+  };
+
+  const handleVoice = () => {
+    if(!("webkitSpeechRecognition" in window||"SpeechRecognition" in window)){alert("Voice not supported — try Chrome.");return;}
+    const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    const rec=new SR();rec.lang="en-US";rec.interimResults=false;
+    rec.onresult=e=>{const t=e.results[0][0].transcript;setInput(t);setTimeout(()=>send(t),50);};
+    rec.start();
+  };
+
+  const accent = theme.accent;
+
+  if(!open) return(
+    <button onClick={()=>setOpen(true)}
+      style={{position:"fixed",bottom:24,right:20,width:56,height:56,borderRadius:"50%",background:`linear-gradient(135deg,${accent},#a78bfa)`,border:"none",cursor:"pointer",boxShadow:`0 4px 20px ${accent}66`,display:"flex",alignItems:"center",justifyContent:"center",zIndex:500,transition:"transform 0.2s"}}
+      title="Open Assistant">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
+        <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73A2 2 0 0 1 10 4a2 2 0 0 1 2-2zm-3 9a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm6 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/>
+      </svg>
+    </button>
+  );
+
+  return(
+    <div style={{position:"fixed",inset:0,zIndex:900,display:"flex",flexDirection:"column",background:theme.bg}}>
+      {/* Header */}
+      <div style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",background:theme.panel,borderBottom:`1px solid ${theme.border}`,flexShrink:0}}>
+        <div style={{width:36,height:36,borderRadius:"50%",background:`linear-gradient(135deg,${accent},#a78bfa)`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          <span style={{fontSize:"1rem"}}>🤖</span>
+        </div>
+        <div style={{flex:1}}>
+          <div style={{fontWeight:700,fontSize:"0.9rem",color:theme.text}}>Assistant</div>
+          <div style={{fontSize:"0.68rem",color:theme.muted}}>Dashboard context loaded · Ask me anything</div>
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          {speaking&&(
+            <button onClick={stopSpeaking} style={{background:"#ef444422",border:"1px solid #ef4444",borderRadius:7,padding:"5px 10px",color:"#ef4444",cursor:"pointer",fontSize:"0.72rem",fontWeight:700}}>⏹ Stop</button>
+          )}
+          <button onClick={()=>{send(buildBriefingRequest());}} disabled={loading}
+            style={{background:`${accent}22`,border:`1px solid ${accent}44`,borderRadius:7,padding:"5px 10px",color:accent,cursor:"pointer",fontSize:"0.72rem",fontWeight:700}}>
+            ☀️ Brief me
+          </button>
+          <button onClick={()=>setOpen(false)} style={{background:"none",border:`1px solid ${theme.border}`,borderRadius:7,padding:"5px 10px",color:theme.muted,cursor:"pointer",fontSize:"0.78rem"}}>✕ Close</button>
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div style={{flex:1,overflowY:"auto",padding:"14px 16px",display:"flex",flexDirection:"column",gap:10}}>
+        {msgs.map((m,i)=>(
+          <div key={i} style={{display:"flex",flexDirection:m.role==="user"?"row-reverse":"row",gap:8,alignItems:"flex-end"}}>
+            {m.role==="assistant"&&(
+              <div style={{width:28,height:28,borderRadius:"50%",background:`linear-gradient(135deg,${accent},#a78bfa)`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:"0.75rem"}}>🤖</div>
+            )}
+            <div style={{
+              maxWidth:"82%",padding:"10px 13px",borderRadius:m.role==="user"?"12px 12px 4px 12px":"12px 12px 12px 4px",
+              background:m.role==="user"?`${accent}22`:theme.panel,
+              border:`1px solid ${m.role==="user"?accent+"44":theme.border}`,
+              fontSize:"0.83rem",color:theme.text,lineHeight:1.5,whiteSpace:"pre-wrap",wordBreak:"break-word",
+            }}>
+              {m.content}
+              {m.role==="assistant"&&(
+                <button onClick={()=>speak(m.content)} style={{display:"block",marginTop:6,background:"none",border:"none",color:theme.muted,cursor:"pointer",fontSize:"0.65rem",padding:0}}>
+                  🔊 Read aloud
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+        {loading&&(
+          <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
+            <div style={{width:28,height:28,borderRadius:"50%",background:`linear-gradient(135deg,${accent},#a78bfa)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.75rem"}}>🤖</div>
+            <div style={{padding:"10px 14px",background:theme.panel,border:`1px solid ${theme.border}`,borderRadius:"12px 12px 12px 4px"}}>
+              <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                {[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:accent,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`,opacity:0.7}}/>)}
+              </div>
+            </div>
+          </div>
+        )}
+        <div ref={bottomRef}/>
+      </div>
+
+      {/* Quick prompts */}
+      {msgs.length<=1&&(
+        <div style={{padding:"0 16px 8px",display:"flex",gap:6,flexWrap:"wrap"}}>
+          {[
+            "What's on my calendar this week?",
+            "What project step should I tackle today?",
+            "What should I work on today?",
+            "How are my habits tracking this month?",
+            "Help me think through adding a new goal",
+          ].map(p=>(
+            <button key={p} onClick={()=>send(p)}
+              style={{padding:"5px 10px",borderRadius:20,background:theme.panel,border:`1px solid ${theme.border}`,color:theme.muted,cursor:"pointer",fontSize:"0.72rem",whiteSpace:"nowrap"}}>
+              {p}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Input */}
+      <div style={{padding:"10px 16px 16px",background:theme.panel,borderTop:`1px solid ${theme.border}`,flexShrink:0}}>
+        <div style={{display:"flex",gap:8}}>
+          <input ref={inputRef} value={input} onChange={e=>setInput(e.target.value)}
+            onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send(input);}}}
+            placeholder="Ask anything, think out loud, check your email..."
+            disabled={loading}
+            style={{flex:1,background:theme.bg,border:`1.5px solid ${theme.border}`,borderRadius:10,padding:"10px 13px",color:theme.text,fontSize:"0.83rem",outline:"none",boxSizing:"border-box"}}/>
+          <button onClick={handleVoice} disabled={loading}
+            style={{width:40,height:40,borderRadius:"50%",background:"transparent",border:`1.5px solid ${theme.border}`,color:theme.muted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/>
+              <path d="M19 10v1a7 7 0 0 1-14 0v-1" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round"/>
+              <line x1="12" y1="19" x2="12" y2="23" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              <line x1="8" y1="23" x2="16" y2="23" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+          </button>
+          <button onClick={()=>send(input)} disabled={loading||!input.trim()}
+            style={{background:accent,border:"none",borderRadius:10,padding:"10px 16px",color:"#000",fontWeight:700,cursor:loading||!input.trim()?"not-allowed":"pointer",fontSize:"0.83rem",flexShrink:0,opacity:loading||!input.trim()?0.5:1}}>
+            Send
+          </button>
+        </div>
+        <div style={{fontSize:"0.63rem",color:theme.muted,marginTop:6,textAlign:"center"}}>
+          Full dashboard context loaded · Gmail aware · Press Enter to send
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes pulse {
+          0%,100%{transform:scale(0.8);opacity:0.5}
+          50%{transform:scale(1.2);opacity:1}
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function App(){
+  const [data,setData]=useState(null);
+  const [showSettings,setShowSettings]=useState(false);
+  const [input,setInput]=useState("");
+  const [toast,setToast]=useState(null);
+  const [loading,setLoading]=useState(true);
+  const [levelUpModal,setLevelUpModal]=useState(null);
+  const [newBadge,setNewBadge]=useState(null);
+  const [toastXp,setToastXp]=useState(null);
+  const [showMonthlyPrompt,setShowMonthlyPrompt]=useState(false);
+
+  useEffect(()=>{
+    (async()=>{
+      try{
+        const res=await pwaStorage.get(STORAGE_KEY);
+        if(res){
+          const saved=JSON.parse(res.value);
+
+          // Migrate: new habits not yet in saved data
+          const savedTitles=new Set((saved.habits||[]).map(h=>h.title));
+          const newHabits=DEFAULT_DATA.habits.filter(h=>!savedTitles.has(h.title));
+          // Patch morning workout: daily any-day + weeklyTarget:3
+          const patchedHabits=(saved.habits||[]).map(h=>{
+            if(h.title==="Morning workout"||h.title==="Evening workout"){
+              return{...h,title:"Evening workout",frequency:"daily",daysOfWeek:[0,1,2,3,4,5,6],weeklyTarget:h.weeklyTarget||3,monthlyGoals:h.monthlyGoals||{}};
+            }
+            return{...h,monthlyGoals:h.monthlyGoals||{}};
+          });
+
+          // Migrate: Pilots schedule
+          const hasPilots=(saved.events||[]).some(e=>e.title&&e.title.includes("Pilots"));
+          // Merge any new DEFAULT events not already in saved (by title+date)
+          const savedEventKeys=new Set((saved.events||[]).map(e=>e.title+"_"+e.date));
+          const newDefaultEvents=DEFAULT_DATA.events.filter(e=>!savedEventKeys.has(e.title+"_"+e.date));
+          const mergedEvents=[...(saved.events||[]),...newDefaultEvents];
+
+          // Ensure monthlyGoals on all habits
+          const migratedHabits=[...patchedHabits,...newHabits];
+
+          const finalData={
+            ...saved,
+            events:mergedEvents,
+            notes:saved.notes||[],
+            projects:saved.projects||DEFAULT_DATA.projects,
+            rewards:saved.rewards||DEFAULT_DATA.rewards,
+            habits:migratedHabits,
+          };
+          if(!hasPilots||newHabits.length>0){
+            await pwaStorage.set(STORAGE_KEY,JSON.stringify(finalData));
+          }
+          setData(finalData);
+
+          // Auto monthly review prompt
+          const mk=monthKey();
+          const lastReview=saved.settings?.lastMonthlyReview;
+          if(lastReview!==mk){ setTimeout(()=>setShowMonthlyPrompt(true),2000); }
+        } else {
+          setData(DEFAULT_DATA);
+          setTimeout(()=>setShowMonthlyPrompt(true),2000);
+        }
+      }
+      catch{setData(DEFAULT_DATA);}
+      setLoading(false);
+      // Request notification permission
+      if('Notification' in window && Notification.permission==='default'){
+        setTimeout(()=>window.requestNotificationPermission&&window.requestNotificationPermission(), 3000);
+      }
+    })();
+  },[]);
+
+  const save=useCallback(async nd=>{setData(nd);try{await pwaStorage.set(STORAGE_KEY,JSON.stringify(nd));}catch{}},[]);
+  const showToast=msg=>setToast(msg);
+
+  const earnXP=useCallback((amount, newStats={})=>{
+    setData(prev=>{
+      if(!prev)return prev;
+      const r=prev.rewards||{xp:0,badges:[],currentStreak:0,maxStreak:0,lastActiveDate:null,totalTodos:0,totalHabits:0,totalSteps:0,totalNotes:0,nightOwl:false,earlyBird:false};
+      const oldLevel=calcLevel(r.xp);
+      const newXp=(r.xp||0)+amount;
+      const newLevel=calcLevel(newXp);
+      // streak
+      const todayS=todayStr();
+      const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
+      const yStr=yesterday.toISOString().slice(0,10);
+      const streak=r.lastActiveDate===todayS?r.currentStreak:r.lastActiveDate===yStr?(r.currentStreak||0)+1:1;
+      const maxStreak=Math.max(r.maxStreak||0,streak);
+      // time badges
+      const h=new Date().getHours();
+      const mergedStats={...r,...newStats,xp:newXp,currentStreak:streak,maxStreak,lastActiveDate:todayS,nightOwl:r.nightOwl||(h>=22),earlyBird:r.earlyBird||(h<7)};
+      const newBadges=checkNewBadges(mergedStats,r.badges||[]);
+      const updatedRewards={...mergedStats,badges:[...(r.badges||[]),...newBadges]};
+      const updated={...prev,rewards:updatedRewards};
+      pwaStorage.set(STORAGE_KEY,JSON.stringify(updated)).catch(()=>{});
+      if(newLevel>oldLevel) setTimeout(()=>setLevelUpModal(newLevel),300);
+      if(newBadges.length>0) setTimeout(()=>setNewBadge(BADGE_DEFS.find(b=>b.id===newBadges[0])),600);
+      setToastXp(amount);
+      return updated;
+    });
+  },[]);
+
+  const processInput=text=>{
+    if(!text.trim()||!data)return;
+    const d={...data,projects:data.projects||[],notes:data.notes||[]};
+    const parsed=parseVoiceInput(text);
+    if(parsed.type==="note"){save({...d,notes:[{id:genId(),title:"",body:parsed.data.body.trim(),pinned:false,createdAt:Date.now(),updatedAt:Date.now()},...d.notes]});showToast("Note saved");}
+    else if(parsed.type==="todo"){save({...d,todos:[...d.todos,{...parsed.data,id:genId(),completed:false}]});showToast(`Task added: "${parsed.data.title}"`);}
+    else if(parsed.type==="event"){save({...d,events:[...d.events,{...parsed.data,id:genId()}]});showToast(`Event added: "${parsed.data.title}"`);}
+    else if(parsed.type==="habit"){save({...d,habits:[...d.habits,{...parsed.data,id:genId(),frequency:"daily",daysOfWeek:[0,1,2,3,4,5,6],completions:{},monthlyGoals:{}}]});showToast(QUIPS.habitAdded);}
+    else showToast("Try: 'Add note…' · 'Add todo…' · 'Schedule…' · 'Add habit…'");
+    setInput("");
+  };
+
+  const {activeAlerts,dismiss}=useReminderEngine(data?.events||[],data?.todos||[],data?.projects||[]);
+
+  if(loading||!data)return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0a0e1a",color:"#38bdf8",fontFamily:"system-ui"}}>Loading…</div>;
+
+  const themeBase=THEMES[data.settings.theme]||THEMES.dark;
+  const theme={...themeBase,accent:data.settings.accent||themeBase.accent};
+  const safeD={...data,projects:data.projects||[],notes:data.notes||[],habits:(data.habits||[]).map(h=>({...h,monthlyGoals:h.monthlyGoals||{}}))};
+
+  return(
+    <div style={{minHeight:"100vh",background:theme.bg,color:theme.text,fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",padding:"12px 16px",maxWidth:680,margin:"0 auto",boxSizing:"border-box"}}>
+      <ReminderAlert reminders={activeAlerts} accent={theme.accent} onDismiss={dismiss}/>
+      {levelUpModal&&<LevelUpModal level={levelUpModal} accent={theme.accent} theme={theme} onClose={()=>setLevelUpModal(null)}/>}
+      {showMonthlyPrompt&&(
+        <MonthlyReviewModal habits={safeD.habits} theme={theme}
+          onClose={()=>{setShowMonthlyPrompt(false);save({...safeD,settings:{...safeD.settings,lastMonthlyReview:monthKey()}});}}
+          onSetGoal={goals=>{
+            const updated=safeD.habits.map(h=>({...h,monthlyGoals:{...h.monthlyGoals||{},[monthKey()]:goals[h.id]}}));
+            save({...safeD,habits:updated,settings:{...safeD.settings,lastMonthlyReview:monthKey()}});
+            setShowMonthlyPrompt(false);
+          }}
+        />
+      )}
+      {newBadge&&<BadgeToast badge={newBadge} accent={theme.accent} onDismiss={()=>setNewBadge(null)}/>}
+
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+        <div>
+          <div style={{fontSize:"0.63rem",letterSpacing:"0.15em",textTransform:"uppercase",color:theme.muted}}>COMMAND CENTER</div>
+          <div style={{fontSize:"0.95rem",fontWeight:700,color:theme.text}}>{getGreeting(safeD.settings.name)}</div>
+        </div>
+        <button onClick={()=>setShowSettings(s=>!s)} style={{background:"none",border:`1.5px solid ${theme.border}`,borderRadius:8,padding:"6px 10px",color:theme.muted,cursor:"pointer",fontSize:"0.78rem",display:"flex",alignItems:"center",gap:5}}>⚙ Settings</button>
+      </div>
+
+      <Clock accent={theme.accent}/>
+
+      <div style={{display:"flex",gap:8,marginBottom:12,marginTop:8}}>
+        <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")processInput(input);}}
+          placeholder="'Add note…' · 'Add todo fix car Thursday' · 'Schedule Pilots game 7pm Friday'"
+          style={{flex:1,background:theme.panel,border:`1.5px solid ${theme.border}`,borderRadius:8,padding:"9px 12px",color:theme.text,fontSize:"0.8rem",outline:"none",boxSizing:"border-box"}}/>
+        <VoiceButton onTranscript={t=>{setInput(t);setTimeout(()=>processInput(t),100);}} accent={theme.accent}/>
+        <button onClick={()=>processInput(input)} style={{background:theme.accent,border:"none",borderRadius:8,padding:"9px 14px",color:"#000",fontWeight:700,cursor:"pointer",fontSize:"0.82rem",flexShrink:0}}>Go</button>
+      </div>
+
+      {showSettings&&(
+        <div style={{marginBottom:12}}>
+          <SettingsPanel settings={safeD.settings} theme={theme} onSave={s=>{save({...safeD,settings:s});setShowSettings(false);}} onClose={()=>setShowSettings(false)}/>
+        </div>
+      )}
+
+      <div style={{display:"flex",flexDirection:"column",gap:12}}>
+        <TodaySummary events={safeD.events} todos={safeD.todos} habits={safeD.habits} projects={safeD.projects} theme={theme}/>
+        <RewardsPanel rewards={safeD.rewards} theme={theme}/>
+        <WeatherWidget theme={theme}/>
+        <CalendarPanel events={safeD.events} todos={safeD.todos} theme={theme}/>
+        <ProjectsPanel
+          projects={safeD.projects} theme={theme}
+          onSave={projects=>save({...safeD,projects})}
+          onDeleteProject={id=>save({...safeD,projects:safeD.projects.filter(p=>p.id!==id)})}
+          onMarkStepDone={(projId,stepId)=>{
+            save({...safeD,projects:safeD.projects.map(p=>p.id!==projId?p:{...p,lastProgressDate:todayStr(),steps:p.steps.map(s=>s.id===stepId?{...s,done:true}:s)})});
+            earnXP(XP_PER_STEP,{totalSteps:(safeD.rewards?.totalSteps||0)+1});
+            showToast(pick(QUIPS.stepComplete));
+          }}
+          onAddToTodo={t=>{save({...safeD,todos:[...safeD.todos,t]});showToast(`Added to To-Do: "${t.title.slice(0,38)}…"`);}}
+        />
+        <NotesPanel notes={safeD.notes} theme={theme}
+          onAdd={n=>save({...safeD,notes:[n,...safeD.notes]})}
+          onUpdate={n=>save({...safeD,notes:safeD.notes.map(x=>x.id===n.id?n:x)})}
+          onDelete={id=>save({...safeD,notes:safeD.notes.filter(n=>n.id!==id)})}
+        />
+        <EventsPanel events={safeD.events} theme={theme} onAdd={ev=>save({...safeD,events:[...safeD.events,ev]})} onDelete={id=>save({...safeD,events:safeD.events.filter(e=>e.id!==id)})}/>
+        <TodoPanel todos={safeD.todos} theme={theme} onAdd={t=>save({...safeD,todos:[...safeD.todos,t]})} onToggle={id=>{
+              const t=safeD.todos.find(t=>t.id===id);
+              const completing=t&&!t.completed;
+              save({...safeD,todos:safeD.todos.map(t=>t.id===id?{...t,completed:!t.completed}:t)});
+              if(completing){earnXP(XP_PER_TODO,{totalTodos:(safeD.rewards?.totalTodos||0)+1});showToast(pick(QUIPS.todoComplete));}
+            }} onDelete={id=>save({...safeD,todos:safeD.todos.filter(t=>t.id!==id)})}/>
+        <HabitsPanel habits={safeD.habits} theme={theme} onSetGoals={updated=>save({...safeD,habits:updated})} onAdd={h=>save({...safeD,habits:[...safeD.habits,h]})} onToggleDay={(id,date)=>{
+              const h=safeD.habits.find(h=>h.id===id);
+              const wasOff=h&&!h.completions?.[date];
+              save({...safeD,habits:safeD.habits.map(h=>h.id===id?{...h,completions:{...h.completions,[date]:!h.completions?.[date]}}:h)});
+              if(wasOff){earnXP(XP_PER_HABIT,{totalHabits:(safeD.rewards?.totalHabits||0)+1});showToast(pick(QUIPS.habitComplete));}
+            }} onDelete={id=>save({...safeD,habits:safeD.habits.filter(h=>h.id!==id)})}/>
+      </div>
+
+      <div style={{marginTop:12,padding:"8px 12px",background:theme.panel,border:`1px solid ${theme.border}`,borderRadius:8,fontSize:"0.68rem",color:theme.muted,lineHeight:1.7}}>
+        <strong style={{color:theme.accent}}>Commands:</strong> "Add note [text]" · "Add todo [task] [priority] [date]" · "Schedule [event] [time] [day]" · "Add habit [name]" · 🎤 mic
+      </div>
+
+      {toast&&<Toast message={toast} accent={theme.accent} onDismiss={()=>{setToast(null);setToastXp(null);}} xp={toastXp}/>}
+      <AssistantChat data={safeD} theme={theme}/>
+    </div>
+  );
+}
+
+
+// Mount
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(React.createElement(App));
+</script>
+</body>
+</html>
