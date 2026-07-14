@@ -248,6 +248,13 @@ const QUIPS = {
   eventAdded: "Locked in. I'll remind you before you try to forget.",
   habitAdded: "New habit created. Day one is always the easiest part. Enjoy it while it lasts.",
   todoAdded: "Task added to the pile. The pile grows. We manage the pile.",
+  rewardRedeemed: [
+    "REDEEMED. You worked for that. Enjoy it without guilt — that's an order.",
+    "That's yours. You earned it. Don't you dare feel bad about it.",
+    "Reward unlocked. The system has spoken. Go enjoy your damn life.",
+    "SPENT. Worth every XP. Now get back to earning more.",
+    "You did the work. This is the payoff. Savor it.",
+  ],
 };
 
 function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
@@ -322,6 +329,52 @@ function getHabitGoal(habit, mk){
   return habit.monthlyGoals?.[mk] ?? calcGoalForHabit(habit,mk);
 }
 
+// ─── GOAL REWARD HELPERS ─────────────────────────────────────────────────────
+function getWeekKey(date){
+  // ISO week: Monday-based
+  const d = date ? new Date(date) : new Date();
+  const day = d.getDay(); // 0=Sun
+  const diff = d.getDate() - day + (day===0?-6:1); // Monday
+  const mon = new Date(d.setDate(diff));
+  return mon.toISOString().slice(0,10);
+}
+function getCurrentWeekKey(){ return getWeekKey(new Date()); }
+
+function calcWeekHabitCompletion(habits, weekStartStr){
+  // For each day Mon-Sun of the week, check if ALL daily habits were done
+  const start = new Date(weekStartStr+"T12:00:00");
+  const dailyHabits = habits.filter(h=>h.frequency==="daily");
+  if(!dailyHabits.length) return {days:0, total:7, pct:0, allDays:[]};
+  let days = 0;
+  const allDays = [];
+  for(let i=0;i<7;i++){
+    const d = new Date(start);
+    d.setDate(start.getDate()+i);
+    const ds = d.toISOString().slice(0,10);
+    // Only count up to today
+    if(ds > todayStr()){ allDays.push({date:ds,done:null}); continue; }
+    const allDone = dailyHabits.every(h=>h.completions?.[ds]);
+    if(allDone) days++;
+    allDays.push({date:ds, done:allDone});
+  }
+  return {days, total:7, pct:Math.round((days/7)*100), allDays};
+}
+
+function calcMonthHabitCompletion(habits, mk){
+  const [y,m] = mk.split("-").map(Number);
+  const daysTotal = daysInMonthFromKey(mk);
+  const dailyHabits = habits.filter(h=>h.frequency==="daily");
+  if(!dailyHabits.length) return {days:0, total:daysTotal, pct:0};
+  let days=0, tracked=0;
+  for(let d=1;d<=daysTotal;d++){
+    const ds=`${y}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+    if(ds>todayStr()) continue;
+    tracked++;
+    if(dailyHabits.every(h=>h.completions?.[ds])) days++;
+  }
+  return {days, total:tracked, pct:tracked?Math.round((days/tracked)*100):0};
+}
+
 // ─── XP + LEVEL HELPERS ────────────────────────────────────────────────────────
 function calcLevel(xp){ return Math.floor(xp/XP_PER_LEVEL)+1; }
 function xpForNext(xp){ return XP_PER_LEVEL-(xp%XP_PER_LEVEL); }
@@ -360,7 +413,36 @@ function timeAgo(ts){ const d=Date.now()-ts; if(d<60000)return"just now"; if(d<3
 
 const DEFAULT_DATA = {
   settings:{ name:"Tony", theme:"dark", accent:"#38bdf8" },
-  rewards:{ xp:0, badges:[], currentStreak:0, maxStreak:0, lastActiveDate:null, totalTodos:0, totalHabits:0, totalSteps:0, totalNotes:0, nightOwl:false, earlyBird:false },
+  rewards:{ xp:0, spendableXp:0, badges:[], currentStreak:0, maxStreak:0, lastActiveDate:null, totalTodos:0, totalHabits:0, totalSteps:0, totalNotes:0, nightOwl:false, earlyBird:false },
+  goalRewards:{
+    weekly:{
+      target:"",
+      restaurant:"",
+      earned:false,
+      lastEarnedWeek:"",
+      dismissed:false,
+    },
+    monthly:{
+      target:"",
+      restaurant:"",
+      earned:false,
+      lastEarnedMonth:"",
+      dismissed:false,
+      pctRequired:80,
+    },
+  },
+  rewardStore:[
+    {id:genId(), title:"Guilt-free gaming day",      emoji:"🎮", desc:"Full day of gaming, zero productivity guilt. You earned it.",           cost:200,  category:"experience", redeemed:0},
+    {id:genId(), title:"Order out instead of cooking",emoji:"🍕", desc:"Skip cooking entirely. Get whatever you want delivered.",               cost:100,  category:"food",       redeemed:0},
+    {id:genId(), title:"Nice dinner out",             emoji:"🍽️", desc:"Sit-down dinner, good food, no guilt about the bill.",                  cost:300,  category:"food",       redeemed:0},
+    {id:genId(), title:"New baseball gear",           emoji:"⚾", desc:"That piece of gear you've been eyeing. Bat, glove, cleats — your call.", cost:500,  category:"gear",       redeemed:0},
+    {id:genId(), title:"Climbing gym + friend",       emoji:"🧗", desc:"Book a climbing session and bring someone. Earned leisure.",            cost:250,  category:"experience", redeemed:0},
+    {id:genId(), title:"New game",                    emoji:"🕹️", desc:"Buy a game you've had on your list. No justification needed.",          cost:350,  category:"gear",       redeemed:0},
+    {id:genId(), title:"Lazy Sunday pass",            emoji:"😴", desc:"Do absolutely nothing all day. The system officially endorses this.",   cost:150,  category:"experience", redeemed:0},
+    {id:genId(), title:"Pitching lesson",             emoji:"🥎", desc:"Book a lesson. Invest in the arm.",                                     cost:400,  category:"experience", redeemed:0},
+    {id:genId(), title:"Fancy coffee week",           emoji:"☕", desc:"Get the expensive coffee every day for a week. No small drip.",         cost:75,   category:"food",       redeemed:0},
+    {id:genId(), title:"New climbing gear",           emoji:"🪨", desc:"Shoes, chalk bag, harness upgrade — whatever the wall needs.",          cost:450,  category:"gear",       redeemed:0},
+  ],
   events:[
     {id:genId(),title:"Pilots @ Trash Pandas",   date:"2026-06-02",time:"19:30",category:"game",notes:"Russell Road"},
     {id:genId(),title:"Pilots vs. Shuckers",      date:"2026-06-06",time:"13:00",category:"game",notes:"Interlake H.S."},
@@ -385,32 +467,89 @@ const DEFAULT_DATA = {
     {id:genId(),title:"Run Club",date:"2026-08-11",time:"18:45",category:"personal",notes:"Tuesday run club"},
     {id:genId(),title:"Run Club",date:"2026-08-18",time:"18:45",category:"personal",notes:"Tuesday run club"},
     {id:genId(),title:"Run Club",date:"2026-08-25",time:"18:45",category:"personal",notes:"Tuesday run club"},
+    {id:genId(),title:"Deep Tissue Massage",date:"2026-07-10",time:"18:00",category:"appointment",notes:"Meridian Ave Massage, Puyallup WA — 60 min"},
+    {id:genId(),title:"Cupping Massage",date:"2026-07-23",time:"18:00",category:"appointment",notes:"Meridian Ave Massage, Puyallup WA — 60 min"},
+    {id:genId(),title:"Morning Flow Yoga",date:"2026-07-14",time:"09:30",category:"personal",notes:"Grit City Wellness — with Hannah Pemelton, 60 min"},
+    {id:genId(),title:"Whole Body Cryotherapy",date:"2026-07-14",time:"10:45",category:"personal",notes:"Grit City Wellness — 15 min"},
+    {id:genId(),title:"Infrared Sauna",date:"2026-07-15",time:"18:15",category:"personal",notes:"Grit City Wellness — 45 min"},
+    {id:genId(),title:"Whole Body Cryotherapy",date:"2026-07-16",time:"18:15",category:"personal",notes:"Grit City Wellness — 15 min"},
+    {id:genId(),title:"Infrared Sauna",date:"2026-07-17",time:"18:15",category:"personal",notes:"Grit City Wellness — 45 min"},
+    {id:genId(),title:"Therapy",date:"2026-07-07",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-07-14",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-07-21",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-07-28",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-08-04",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-08-11",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-08-18",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-08-25",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-09-01",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-09-08",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-09-15",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-09-22",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-09-29",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-10-06",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-10-13",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-10-20",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-10-27",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-11-03",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-11-10",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-11-17",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-11-24",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-12-01",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-12-08",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-12-15",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-12-22",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-12-29",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
   ], todos:[], notes:[],
   habits:[
-    {id:genId(),title:"Evening workout",  frequency:"daily", daysOfWeek:[0,1,2,3,4,5,6],completions:{},monthlyGoals:{},weeklyTarget:3},
+    {id:genId(),title:"Morning workout",  frequency:"daily", daysOfWeek:[0,1,2,3,4,5,6],completions:{},monthlyGoals:{},weeklyTarget:3},
     {id:genId(),title:"Run club",         frequency:"weekly",daysOfWeek:[3],         completions:{},monthlyGoals:{}},
     {id:genId(),title:"Meal prep",        frequency:"weekly",daysOfWeek:[0],         completions:{},monthlyGoals:{}},
-    {id:genId(),title:"Heat/sauna",       frequency:"daily", daysOfWeek:[0,1,2,3,4,5,6],completions:{},monthlyGoals:{}},
     {id:genId(),title:"Stretch",          frequency:"daily", daysOfWeek:[0,1,2,3,4,5,6],completions:{},monthlyGoals:{}},
     {id:genId(),title:"Meditation",       frequency:"daily", daysOfWeek:[0,1,2,3,4,5,6],completions:{},monthlyGoals:{}},
     {id:genId(),title:"Reading",          frequency:"daily", daysOfWeek:[0,1,2,3,4,5,6],completions:{},monthlyGoals:{}},
     {id:genId(),title:"Journaling",       frequency:"daily", daysOfWeek:[0,1,2,3,4,5,6],completions:{},monthlyGoals:{}},
+    {id:genId(),title:"Pimsleur Spanish",  frequency:"daily", daysOfWeek:[0,1,2,3,4,5,6],completions:{},monthlyGoals:{},weeklyTarget:5},
+    {id:genId(),title:"Anki review",       frequency:"weekly",daysOfWeek:[1,2,3,4,5],   completions:{},monthlyGoals:{}},
   ],
   projects:[
-    { id:genId(), title:"Learn Spanish", color:"#f59e0b", type:"flexible", status:"active",
+    { id:genId(), title:"Spanish Practice", color:"#f59e0b", type:"flexible", status:"active",
       nudgeDays:3, lastProgressDate:null,
-      description:"Work through course books at your own pace. Check off milestones as you hit them — no pressure on order or timing.",
+      description:"Conversational clinical Spanish for pediatric practice. 3 sessions/week, 6-9 month timeline. Core tools: Pimsleur (automaticity) + Langua (clinical roleplay). Goal: run routine visits in Spanish.",
       steps:[
-        {id:genId(),title:"Chapter 1 — Greetings & basics",done:false,notes:""},
-        {id:genId(),title:"Chapter 2 — Numbers and time",done:false,notes:""},
-        {id:genId(),title:"Chapter 3 — Family vocabulary",done:false,notes:""},
-        {id:genId(),title:"Chapters 1–3 review + practice exercises",done:false,notes:""},
-        {id:genId(),title:"Chapter 4 — Everyday verbs",done:false,notes:""},
-        {id:genId(),title:"Chapter 5 — Common phrases",done:false,notes:""},
-        {id:genId(),title:"First full conversation practice",done:false,notes:""},
-        {id:genId(),title:"Chapter 6 — Food & dining",done:false,notes:""},
-        {id:genId(),title:"Chapter 7 — Travel & directions",done:false,notes:""},
-        {id:genId(),title:"Mid-book review session",done:false,notes:""},
+        // ── SETUP ──
+        {id:genId(),title:"📱 Set up tools: Pimsleur trial + Langua account + Anki",done:false,notes:"Pimsleur ~$21/mo, Langua ~$30/mo. Anki free on desktop. Start Pimsleur Day 1 immediately — stack onto commute."},
+        {id:genId(),title:"🗣️ Set up café en español with a coworker",done:false,notes:"Propose a fixed 10-min session 2x/week. Give them one job: reformulate, don't correct. Come with a topic prepared."},
+
+        // ── PHASE 1: Foundation (Months 1-2) ──
+        {id:genId(),title:"📚 Phase 1 — Start Pimsleur Latin American Spanish (daily, stack on commute)",done:false,notes:"30-min audio lessons, hands-free. 5-6 days/week. Built on graduated-interval recall — forces you to produce speech out loud, which is the exact muscle you're missing."},
+        {id:genId(),title:"📚 Phase 1 — Complete Language Transfer audio course (free)",done:false,notes:"Free at languagetransfer.org. Superb grammar intuition builder. Listen during walks/dishes."},
+        {id:genId(),title:"🃏 Phase 1 — Build Anki deck: top 500 words + first 50 clinical words",done:false,notes:"English on front, Spanish on back — practice retrieval, not recognition. 10 min review on 2 off-days each week."},
+        {id:genId(),title:"🗣️ Phase 1 — Drill buy-time chunks to automaticity",done:false,notes:"Déjeme explicarle / Lo que quiero decir es / Perdón, ¿me lo puede repetir? / ¿Me lo puede decir más despacio? / Un momento por favor. Say these until they come out without thinking — they stop the freeze."},
+        {id:genId(),title:"🗣️ Phase 1 — Drill Opening & Rapport phrases from memory",done:false,notes:"Hola soy el doctor ___ / ¿Qué los trae hoy? / ¿Cómo se llama su hijo/hija? / ¿Cuántos años tiene? Shadow each 3x then cover Spanish and produce from English alone."},
+        {id:genId(),title:"🗣️ Phase 1 — Drill Taking the History phrases from memory",done:false,notes:"¿Desde cuándo tiene esto? / ¿Ha tenido fiebre? / ¿Está comiendo y bebiendo normalmente? / ¿Ha vomitado? / ¿Le cuesta respirar? / ¿Está al día con las vacunas? Cover and produce."},
+        {id:genId(),title:"✅ Phase 1 Milestone — Smooth 2-min self-introduction without freezing",done:false,notes:"Record yourself. Listen back. Phase 1-2 pediatric phrases should come out from memory, no hesitation."},
+
+        // ── PHASE 2: Conversational Engine (Months 3-4) ──
+        {id:genId(),title:"📚 Phase 2 — Continue Pimsleur + start Langua clinical roleplays",done:false,notes:"Set up sick visit, vaccine talk, worried parent scenarios in Langua. Repeat each until automatic. This is where your specific gap closes."},
+        {id:genId(),title:"📚 Phase 2 — Grammar: preterite vs imperfect, near future (ir a + infinitive)",done:false,notes:"Session 3 each week: 20 min Anki + 25 min on this grammar, written as sentences about your actual workday."},
+        {id:genId(),title:"🃏 Phase 2 — Expand Anki to 1,500 words + connectors",done:false,notes:"Add: sin embargo, o sea, por lo tanto — these make speech flow. Add words you blank on each week plus their circumlocution workarounds."},
+        {id:genId(),title:"🗣️ Phase 2 — Drill Exam + Explaining phrases from memory",done:false,notes:"Voy a revisarle los oídos / Abre la boca / Respira hondo / Es una infección de oído / Es un virus, no necesita antibióticos / Déle este medicamento cada 8 horas."},
+        {id:genId(),title:"🗣️ Phase 2 — Drill Return Precautions + Closing phrases",done:false,notes:"Si la fiebre no baja en ___ días tráigalo de nuevo / Si le cuesta respirar vaya a emergencias / Llámenos si empeora / ¿Tiene alguna pregunta? Say clearly every time."},
+        {id:genId(),title:"✅ Phase 2 Milestone — 15-min Langua conversation, no English; full sick visit roleplay",done:false,notes:"Start to finish: opening, history, exam, plan, return precautions, close. Record it. This is the real test."},
+
+        // ── PHASE 3: Clinical Fluency (Months 5-6) ──
+        {id:genId(),title:"📚 Phase 3 — Grammar: subjunctive (requests/doubt/recommendations), conditional, reported speech",done:false,notes:"You'll use subjunctive constantly with parents. Es importante que tome / Recomiendo que regrese / No creo que sea grave."},
+        {id:genId(),title:"📚 Phase 3 — Deep pediatric vocabulary + parent-facing register",done:false,notes:"Dreaming Spanish for listening input. News in Slow Spanish. Switch phone to Spanish for low-effort exposure."},
+        {id:genId(),title:"🗣️ Phase 3 — Drill circumlocution reps (anti-freezing)",done:false,notes:"wheezing = un silbido cuando respira / rash = unas manchas rojas en la piel / swollen = está hinchado / dehydrated = le falta líquido / congested = tiene la nariz tapada. Add your own blanks weekly."},
+        {id:genId(),title:"🗣️ Phase 3 — Mock well-child visit drilled to smooth",done:false,notes:"Full 15-minute well-child. Growth, development, feeding, sleep, vaccines, anticipatory guidance. All in Spanish."},
+        {id:genId(),title:"🗣️ Phase 3 — Mock vaccine counseling conversation drilled to smooth",done:false,notes:"Cover the common concerns: safety, schedule, side effects, why it matters. Practice until you don't have to think about the words."},
+        {id:genId(),title:"🗣️ Phase 3 — Mock worried parent scenario drilled to smooth",done:false,notes:"Sé que es preocupante, pero va a estar bien / Hizo bien en traerlo. Practice reassurance, explaining, handling pushback."},
+        {id:genId(),title:"✅ Phase 3 Milestone — Run a real low-stakes visit in Spanish with a colleague present",done:false,notes:"Ask one native-speaker colleague to let you take a real routine visit in Spanish. This is the big one."},
+
+        // ── PHASE 4: Consolidation (Month 7+) ──
+        {id:genId(),title:"📚 Phase 4 — Shift to native-speed content + find intercambio partner",done:false,notes:"Increase speaking to 2x/week. Find a language exchange partner. Native podcasts, shows, no subtitles."},
+        {id:genId(),title:"✅ Phase 4 Milestone — Hold your own with a worried parent, improvise and recover",done:false,notes:"You improvise, recover from missing words, and the family leaves confident. Month 9 target."},
       ]},
     { id:genId(), title:"Car Sound Deadening", color:"#38bdf8", type:"linear", status:"active",
       description:"2024 Civic Sport Touring Hatchback. Layer order: Siless 157mil foam first (bare metal), then MLV on top — floors/trunk/spare well/hatch only. Doors get Siless only + optional XCEL in lower sump. Wheel wells get MLV only (exterior, behind splash guards).",
@@ -524,7 +663,7 @@ function VoiceButton({onTranscript,accent}){
   const [supported]=useState(()=>"webkitSpeechRecognition" in window||"SpeechRecognition" in window);
   const recRef=useRef(null);
   const toggle=()=>{
-    if(!supported){alert("Voice input not supported. Try Chrome.");return;}
+    if(!supported){alert("Voice not supported here — use the chat button instead! Tap ⚡ bottom-right, then tap the mic in the chat.");return;}
     if(listening){recRef.current?.stop();setListening(false);return;}
     const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
     const rec=new SR();rec.lang="en-US";rec.interimResults=false;rec.maxAlternatives=1;
@@ -1731,7 +1870,18 @@ function buildSystemPrompt(data, weatherRef){
     "",
     "TONY CONTEXT: Pediatrician at Woodcreek (4 days/wk). Plays for the Pilots baseball team. Tuesday run club. Rock climbs, lifts. Learning Spanish. ADHD. DIY car soundproofing (2024 Civic Sport Touring). Fantasy football, gaming, Seinfeld, Dungeon Crawler Carl. University Place WA.",
     "",
-    "When Tony wants to add something, help him think it through then tell him what to add and where.",
+    "When Tony asks you to add, create, or complete something, output a JSON action block AND a friendly confirmation.",
+    "ACTION FORMAT: wrap actions in <action> tags with JSON inside. Examples:",
+    "Add todo: <action>{\"type\":\"ADD_TODO\",\"title\":\"Call insurance\",\"priority\":\"medium\",\"dueDate\":\"2026-07-01\"}</action>",
+    "Add event: <action>{\"type\":\"ADD_EVENT\",\"title\":\"Pilots game\",\"date\":\"2026-07-04\",\"time\":\"19:00\",\"category\":\"game\",\"notes\":\"\"}</action>",
+    "Add habit: <action>{\"type\":\"ADD_HABIT\",\"title\":\"Cold shower\",\"weeklyTarget\":null}</action>",
+    "Add note: <action>{\"type\":\"ADD_NOTE\",\"title\":\"\",\"body\":\"Remember to check oil\"}</action>",
+    "Complete todo: <action>{\"type\":\"COMPLETE_TODO\",\"query\":\"call insurance\"}</action>",
+    "Complete habit: <action>{\"type\":\"COMPLETE_HABIT\",\"query\":\"stretch\"}</action>",
+    "Complete project step: <action>{\"type\":\"COMPLETE_STEP\",\"project\":\"Spanish\",\"step\":\"Chapter 1\"}</action>",
+    "Save chat as note: <action>{\"type\":\"SAVE_CHAT_NOTE\",\"title\":\"Brief summary title\",\"body\":\"Full content to save\"}</action>",
+    "For dates, use YYYY-MM-DD format. Today is "+todayStr()+". Days of week: Monday=next monday etc.",
+    "Always confirm what you did in plain English AFTER the action tag. Keep it punchy.",
     "Keep responses concise — mobile screen. Morning briefing = sharp structured day rundown.",
   ];
 
@@ -1739,7 +1889,404 @@ function buildSystemPrompt(data, weatherRef){
 }
 
 
-function AssistantChat({data, theme}){
+
+// ─── REWARD STORE ─────────────────────────────────────────────────────────────
+
+// ─── GOAL REWARD PANEL ────────────────────────────────────────────────────────
+function GoalRewardPanel({habits, goalRewards, theme, onSave, onCelebrate}){
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({
+    weeklyRestaurant: goalRewards?.weekly?.restaurant||"",
+    weeklyTarget: goalRewards?.weekly?.target||"",
+    monthlyRestaurant: goalRewards?.monthly?.restaurant||"",
+    monthlyTarget: goalRewards?.monthly?.target||"",
+    monthlyPct: goalRewards?.monthly?.pctRequired||80,
+  });
+
+  const wk = getCurrentWeekKey();
+  const mk = monthKey();
+  const weekStats = calcWeekHabitCompletion(habits, wk);
+  const monthStats = calcMonthHabitCompletion(habits, mk);
+  const weekEarned = weekStats.days === 7;
+  const monthEarned = monthStats.pct >= (goalRewards?.monthly?.pctRequired||80);
+  const weekAlreadyClaimed = goalRewards?.weekly?.lastEarnedWeek === wk;
+  const monthAlreadyClaimed = goalRewards?.monthly?.lastEarnedMonth === mk;
+
+  // Fire celebration when newly earned
+  useEffect(()=>{
+    if(weekEarned && !weekAlreadyClaimed && goalRewards?.weekly?.restaurant){
+      onCelebrate("weekly", goalRewards.weekly.restaurant);
+    }
+  },[weekEarned]);
+
+  useEffect(()=>{
+    if(monthEarned && !monthAlreadyClaimed && goalRewards?.monthly?.restaurant){
+      onCelebrate("monthly", goalRewards.monthly.restaurant);
+    }
+  },[monthEarned]);
+
+  const saveForm = () => {
+    onSave({
+      weekly:{ ...goalRewards?.weekly, restaurant:form.weeklyRestaurant, target:form.weeklyTarget },
+      monthly:{ ...goalRewards?.monthly, restaurant:form.monthlyRestaurant, target:form.monthlyTarget, pctRequired:form.monthlyPct },
+    });
+    setEditing(false);
+  };
+
+  const claimWeekly = () => {
+    onSave({...goalRewards, weekly:{...goalRewards?.weekly, lastEarnedWeek:wk, earned:true}});
+  };
+  const claimMonthly = () => {
+    onSave({...goalRewards, monthly:{...goalRewards?.monthly, lastEarnedMonth:mk, earned:true}});
+  };
+
+  // Day dots for the week
+  const DAYLETTERS = ["M","T","W","T","F","S","S"];
+  const now = new Date();
+  const todayDow = now.getDay(); // 0=Sun
+  const todayIdx = todayDow===0?6:todayDow-1; // Mon=0
+
+  return(
+    <div style={{background:theme.panel,border:`1px solid ${theme.border}`,borderRadius:10,padding:14}}>
+      <SectionHeader title="Earn Your Meal 🍽️" accent={theme.accent} action={
+        <button onClick={()=>setEditing(e=>!e)} style={{background:"none",border:`1px solid ${theme.border}`,borderRadius:6,color:theme.muted,cursor:"pointer",fontSize:"0.72rem",padding:"3px 8px"}}>{editing?"Done":"Set Rewards"}</button>
+      }/>
+
+      {editing ? (
+        <div>
+          <div style={{marginBottom:14,padding:"12px",background:theme.bg,borderRadius:8}}>
+            <div style={{fontSize:"0.75rem",fontWeight:700,color:theme.accent,marginBottom:8}}>🗓️ Weekly Reward</div>
+            <div style={{marginBottom:8}}>
+              <label style={{display:"block",fontSize:"0.7rem",color:theme.muted,marginBottom:4}}>Restaurant / meal</label>
+              <input value={form.weeklyRestaurant} onChange={e=>setForm({...form,weeklyRestaurant:e.target.value})}
+                placeholder="e.g. Thai Orchid, Chipotle, whatever you're craving"
+                style={{width:"100%",background:"#1a2540",border:"1px solid #2d3f5a",borderRadius:7,padding:"8px 10px",color:"#e2e8f0",fontSize:"0.83rem",boxSizing:"border-box"}}/>
+            </div>
+            <div style={{fontSize:"0.68rem",color:theme.muted}}>Unlock: hit ALL daily habits every day for 7 days</div>
+          </div>
+          <div style={{marginBottom:14,padding:"12px",background:theme.bg,borderRadius:8}}>
+            <div style={{fontSize:"0.75rem",fontWeight:700,color:"#f59e0b",marginBottom:8}}>📅 Monthly Reward</div>
+            <div style={{marginBottom:8}}>
+              <label style={{display:"block",fontSize:"0.7rem",color:theme.muted,marginBottom:4}}>Restaurant / meal</label>
+              <input value={form.monthlyRestaurant} onChange={e=>setForm({...form,monthlyRestaurant:e.target.value})}
+                placeholder="e.g. Bonefish Grill, date night spot, nicer place"
+                style={{width:"100%",background:"#1a2540",border:"1px solid #2d3f5a",borderRadius:7,padding:"8px 10px",color:"#e2e8f0",fontSize:"0.83rem",boxSizing:"border-box"}}/>
+            </div>
+            <div style={{marginBottom:6}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                <label style={{fontSize:"0.7rem",color:theme.muted}}>Required % of days</label>
+                <span style={{fontSize:"0.75rem",fontWeight:700,color:"#f59e0b"}}>{form.monthlyPct}%{form.monthlyPct===69?" 👀":""}</span>
+              </div>
+              <input type="range" min={50} max={100} step={1} value={form.monthlyPct}
+                onChange={e=>setForm({...form,monthlyPct:Number(e.target.value)})}
+                style={{width:"100%",accentColor:"#f59e0b"}}/>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:"0.62rem",color:theme.muted}}>
+                <span>50% (easier)</span><span>100% (perfection)</span>
+              </div>
+            </div>
+          </div>
+          <button onClick={saveForm} style={{width:"100%",background:theme.accent,border:"none",borderRadius:8,padding:"10px",color:"#000",fontWeight:700,cursor:"pointer",fontSize:"0.88rem"}}>Save Rewards</button>
+        </div>
+      ) : (
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+
+          {/* Weekly tracker */}
+          <div style={{background:theme.bg,borderRadius:9,padding:"12px",border:`1px solid ${weekEarned?"#22c55e":theme.border}`,transition:"border 0.3s"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+              <div>
+                <div style={{fontSize:"0.72rem",fontWeight:700,color:theme.accent,marginBottom:1}}>THIS WEEK</div>
+                <div style={{fontSize:"0.82rem",color:theme.text,fontWeight:600}}>
+                  {goalRewards?.weekly?.restaurant || <span style={{color:theme.muted,fontStyle:"italic"}}>Set a restaurant to work toward</span>}
+                </div>
+              </div>
+              <div style={{textAlign:"right",flexShrink:0}}>
+                <div style={{fontSize:"1.1rem",fontWeight:800,color:weekEarned?"#22c55e":theme.text}}>{weekStats.days}/7</div>
+                <div style={{fontSize:"0.62rem",color:theme.muted}}>perfect days</div>
+              </div>
+            </div>
+
+            {/* Day dots */}
+            <div style={{display:"flex",gap:4,marginBottom:8}}>
+              {DAYLETTERS.map((letter,i)=>{
+                const dayData = weekStats.allDays[i];
+                const isToday = i===todayIdx;
+                const isFuture = !dayData || dayData.done===null;
+                const isDone = dayData?.done===true;
+                const isMissed = dayData?.done===false;
+                return(
+                  <div key={i} style={{flex:1,textAlign:"center"}}>
+                    <div style={{
+                      width:"100%",aspectRatio:"1",borderRadius:"50%",
+                      background:isDone?"#22c55e":isMissed?"#ef444433":isFuture?theme.panel:theme.panel,
+                      border:`2px solid ${isDone?"#22c55e":isMissed?"#ef4444":isToday?theme.accent:theme.border}`,
+                      display:"flex",alignItems:"center",justifyContent:"center",
+                      fontSize:"0.7rem",fontWeight:700,
+                      color:isDone?"#000":isMissed?"#ef4444":isToday?theme.accent:theme.muted,
+                      marginBottom:2,
+                    }}>
+                      {isDone?"✓":isMissed?"✕":letter}
+                    </div>
+                    <div style={{fontSize:"0.55rem",color:isToday?theme.accent:theme.muted}}>{letter}</div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {weekEarned && !weekAlreadyClaimed && goalRewards?.weekly?.restaurant && (
+              <button onClick={claimWeekly} style={{width:"100%",background:"linear-gradient(135deg,#22c55e,#16a34a)",border:"none",borderRadius:7,padding:"9px",color:"#000",fontWeight:800,cursor:"pointer",fontSize:"0.85rem"}}>
+                🎉 EARNED IT — Claim {goalRewards.weekly.restaurant}
+              </button>
+            )}
+            {weekAlreadyClaimed && (
+              <div style={{textAlign:"center",fontSize:"0.75rem",color:"#22c55e",fontWeight:700}}>✓ Claimed this week — enjoy it, you earned it</div>
+            )}
+            {!weekEarned && goalRewards?.weekly?.restaurant && (
+              <div style={{fontSize:"0.7rem",color:theme.muted,textAlign:"center"}}>
+                {7-weekStats.days} more perfect day{7-weekStats.days===1?"":"s"} to unlock {goalRewards.weekly.restaurant}
+              </div>
+            )}
+          </div>
+
+          {/* Monthly tracker */}
+          <div style={{background:theme.bg,borderRadius:9,padding:"12px",border:`1px solid ${monthEarned?"#f59e0b":theme.border}`,transition:"border 0.3s"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+              <div>
+                <div style={{fontSize:"0.72rem",fontWeight:700,color:"#f59e0b",marginBottom:1}}>THIS MONTH</div>
+                <div style={{fontSize:"0.82rem",color:theme.text,fontWeight:600}}>
+                  {goalRewards?.monthly?.restaurant || <span style={{color:theme.muted,fontStyle:"italic"}}>Set a monthly reward</span>}
+                </div>
+              </div>
+              <div style={{textAlign:"right",flexShrink:0}}>
+                <div style={{fontSize:"1.1rem",fontWeight:800,color:monthEarned?"#f59e0b":theme.text}}>{monthStats.pct}%</div>
+                <div style={{fontSize:"0.62rem",color:theme.muted}}>need {goalRewards?.monthly?.pctRequired||80}%</div>
+              </div>
+            </div>
+            <div style={{height:6,background:theme.panel,borderRadius:4,marginBottom:8,overflow:"hidden"}}>
+              <div style={{height:"100%",background:monthEarned?"#f59e0b":monthStats.pct>=(goalRewards?.monthly?.pctRequired||80)*0.8?"#f97316":"#ef4444",borderRadius:4,width:monthStats.pct+"%",transition:"width 0.5s"}}/>
+            </div>
+            <div style={{fontSize:"0.68rem",color:theme.muted,marginBottom:8,textAlign:"center"}}>
+              {monthStats.days} perfect days out of {monthStats.total} tracked · need {Math.ceil(((goalRewards?.monthly?.pctRequired||80)/100)*monthStats.total)-monthStats.days > 0 ? Math.ceil(((goalRewards?.monthly?.pctRequired||80)/100)*monthStats.total)-monthStats.days+" more" : "already there 🔥"}
+            </div>
+            {monthEarned && !monthAlreadyClaimed && goalRewards?.monthly?.restaurant && (
+              <button onClick={claimMonthly} style={{width:"100%",background:"linear-gradient(135deg,#f59e0b,#d97706)",border:"none",borderRadius:7,padding:"9px",color:"#000",fontWeight:800,cursor:"pointer",fontSize:"0.85rem"}}>
+                🎉 EARNED IT — Claim {goalRewards.monthly.restaurant}
+              </button>
+            )}
+            {monthAlreadyClaimed && (
+              <div style={{textAlign:"center",fontSize:"0.75rem",color:"#f59e0b",fontWeight:700}}>✓ Claimed this month — you deserved that one</div>
+            )}
+          </div>
+
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── GOAL REWARD CELEBRATION ──────────────────────────────────────────────────
+function GoalRewardCelebration({type, restaurant, theme, accent, onClose}){
+  useEffect(()=>{const t=setTimeout(onClose,8000);return()=>clearTimeout(t);},[onClose]);
+  const isWeekly = type==="weekly";
+  const msgs = isWeekly ? [
+    "EVERY. SINGLE. DAY. You absolute machine.",
+    "7 days perfect. That's not luck, that's a damn lifestyle.",
+    "Weekly goal OBLITERATED. The restaurant has been earned.",
+    "Perfect week achieved. I've updated your file. Impressive.",
+  ] : [
+    "MONTHLY GOAL CRUSHED. You did the work. ALL of it.",
+    "Month complete. The numbers confirm what we suspected: you're built different.",
+    "Monthly target hit. That meal? You didn't just earn it. You DESERVE it.",
+    "Monthly goal achieved. Go eat something amazing and feel zero guilt.",
+  ];
+  const msg = msgs[Math.floor(Math.random()*msgs.length)];
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.9)",zIndex:4000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={onClose}>
+      <div style={{background:theme.panel,border:`2px solid ${isWeekly?"#22c55e":"#f59e0b"}`,borderRadius:16,padding:"28px 24px",maxWidth:340,width:"100%",textAlign:"center",boxShadow:`0 0 60px ${isWeekly?"#22c55e":"#f59e0b"}44`}}>
+        <div style={{fontSize:"3rem",marginBottom:8}}>{isWeekly?"🏆":"👑"}</div>
+        <div style={{fontSize:"1.2rem",fontWeight:800,color:isWeekly?"#22c55e":"#f59e0b",marginBottom:8}}>
+          {isWeekly?"WEEKLY GOAL":"MONTHLY GOAL"} ACHIEVED
+        </div>
+        <div style={{fontSize:"0.88rem",color:theme.text,marginBottom:12,lineHeight:1.5}}>{msg}</div>
+        <div style={{background:isWeekly?"#22c55e22":"#f59e0b22",border:`1px solid ${isWeekly?"#22c55e":"#f59e0b"}`,borderRadius:9,padding:"12px",marginBottom:16}}>
+          <div style={{fontSize:"0.7rem",color:theme.muted,marginBottom:3}}>Your reward</div>
+          <div style={{fontSize:"1.1rem",fontWeight:800,color:isWeekly?"#22c55e":"#f59e0b"}}>🍽️ {restaurant}</div>
+        </div>
+        <div style={{fontSize:"0.72rem",color:theme.muted,marginBottom:14}}>Go claim it. You earned it. No guilt, no asterisk.</div>
+        <button onClick={onClose} style={{background:isWeekly?"#22c55e":"#f59e0b",border:"none",borderRadius:8,padding:"10px 24px",color:"#000",fontWeight:800,cursor:"pointer",fontSize:"0.9rem"}}>
+          LET'S GO 🎉
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const REWARD_CATEGORIES = { food:"🍕 Food & Drink", experience:"✨ Experiences", gear:"🛠️ Gear" };
+
+function RewardStorePanel({rewards, rewardStore, theme, onRedeem, onAdd, onDelete, onEdit}){
+  const [showAdd, setShowAdd] = useState(false);
+  const [editItem, setEditItem] = useState(null);
+  const [redeemAnim, setRedeemAnim] = useState(null);
+  const [filter, setFilter] = useState("all");
+  const [form, setForm] = useState({title:"", emoji:"🎁", desc:"", cost:200, category:"experience"});
+  const spendable = rewards?.spendableXp || 0;
+  const total = rewards?.xp || 0;
+
+  const openAdd = () => { setForm({title:"", emoji:"🎁", desc:"", cost:200, category:"experience"}); setEditItem(null); setShowAdd(true); };
+  const openEdit = (r) => { setForm({...r}); setEditItem(r.id); setShowAdd(true); };
+
+  const save = () => {
+    if(!form.title.trim()) return;
+    if(editItem){ onEdit({...form, id:editItem}); }
+    else { onAdd({...form, id:genId(), redeemed:0}); }
+    setShowAdd(false); setEditItem(null);
+  };
+
+  const handleRedeem = (item) => {
+    if(spendable < item.cost){ return; }
+    setRedeemAnim(item.id);
+    setTimeout(()=>{ onRedeem(item.id); setRedeemAnim(null); }, 800);
+  };
+
+  const categories = ["all", "food", "experience", "gear"];
+  const filtered = (rewardStore||[]).filter(r => filter==="all" || r.category===filter);
+  const affordable = filtered.filter(r => r.cost <= spendable);
+  const locked = filtered.filter(r => r.cost > spendable);
+
+  const RewardCard = ({item}) => {
+    const canAfford = spendable >= item.cost;
+    const isAnimating = redeemAnim === item.id;
+    const pct = Math.min(100, Math.round((spendable/item.cost)*100));
+    return (
+      <div style={{background:isAnimating?"#22c55e22":theme.bg, border:`1px solid ${isAnimating?"#22c55e":canAfford?theme.accent+"44":theme.border}`, borderRadius:10, padding:"12px", transition:"all 0.3s", position:"relative"}}>
+        {isAnimating && <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"2rem",zIndex:10}}>🎉</div>}
+        <div style={{display:"flex",alignItems:"flex-start",gap:10,opacity:isAnimating?0.3:1}}>
+          <div style={{fontSize:"1.8rem",flexShrink:0,lineHeight:1}}>{item.emoji}</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:3}}>
+              <div style={{fontSize:"0.85rem",fontWeight:700,color:theme.text}}>{item.title}</div>
+              <div style={{display:"flex",gap:4,flexShrink:0}}>
+                <button onClick={()=>openEdit(item)} style={{background:"none",border:"none",color:theme.muted,cursor:"pointer",fontSize:"0.7rem",padding:"0 3px"}}>✎</button>
+                <button onClick={()=>onDelete(item.id)} style={{background:"none",border:"none",color:theme.muted,cursor:"pointer",fontSize:"0.7rem",padding:"0 3px",opacity:0.5}}>✕</button>
+              </div>
+            </div>
+            <div style={{fontSize:"0.75rem",color:theme.muted,marginBottom:8,lineHeight:1.4}}>{item.desc}</div>
+            {item.redeemed>0 && <div style={{fontSize:"0.65rem",color:"#22c55e",marginBottom:6}}>✓ Redeemed {item.redeemed}x</div>}
+            {!canAfford && (
+              <div style={{marginBottom:6}}>
+                <div style={{height:3,background:theme.panel,borderRadius:4,overflow:"hidden"}}>
+                  <div style={{height:"100%",background:theme.accent,width:pct+"%",borderRadius:4,transition:"width 0.4s"}}/>
+                </div>
+                <div style={{fontSize:"0.63rem",color:theme.muted,marginTop:2}}>{spendable}/{item.cost} XP — need {item.cost-spendable} more</div>
+              </div>
+            )}
+            <button onClick={()=>handleRedeem(item)} disabled={!canAfford||isAnimating}
+              style={{width:"100%",background:canAfford?`linear-gradient(135deg,${theme.accent},#a78bfa)`:"transparent",border:`1.5px solid ${canAfford?theme.accent:theme.border}`,borderRadius:7,padding:"7px",color:canAfford?"#000":theme.muted,fontWeight:canAfford?700:400,cursor:canAfford?"pointer":"not-allowed",fontSize:"0.78rem",transition:"all 0.2s"}}>
+              {canAfford ? "⚡ Redeem — "+item.cost+" XP" : "🔒 "+item.cost+" XP"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div style={{background:theme.panel,border:`1px solid ${theme.border}`,borderRadius:10,padding:14}}>
+      <SectionHeader title="Reward Store" accent={theme.accent} action={
+        <button onClick={openAdd} style={{background:theme.accent,border:"none",borderRadius:6,color:"#000",fontSize:"0.75rem",fontWeight:700,padding:"4px 10px",cursor:"pointer"}}>+ Add</button>
+      }/>
+
+      {/* Spendable XP balance */}
+      <div style={{background:theme.bg,borderRadius:9,padding:"10px 12px",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div>
+          <div style={{fontSize:"0.68rem",color:theme.muted,marginBottom:2}}>Available to spend</div>
+          <div style={{fontSize:"1.4rem",fontWeight:800,color:theme.accent}}>⚡ {spendable} XP</div>
+        </div>
+        <div style={{textAlign:"right"}}>
+          <div style={{fontSize:"0.68rem",color:theme.muted,marginBottom:2}}>Total earned</div>
+          <div style={{fontSize:"0.85rem",fontWeight:700,color:theme.muted}}>{total} XP</div>
+        </div>
+      </div>
+
+      {/* Category filter */}
+      <div style={{display:"flex",gap:4,marginBottom:12,overflowX:"auto"}}>
+        {categories.map(c=>(
+          <button key={c} onClick={()=>setFilter(c)}
+            style={{padding:"4px 10px",borderRadius:20,border:`1px solid ${filter===c?theme.accent:theme.border}`,background:filter===c?`${theme.accent}22`:"transparent",color:filter===c?theme.accent:theme.muted,cursor:"pointer",fontSize:"0.72rem",whiteSpace:"nowrap",fontWeight:filter===c?700:400}}>
+            {c==="all"?"All":REWARD_CATEGORIES[c]||c}
+          </button>
+        ))}
+      </div>
+
+      {filtered.length===0 && <p style={{color:theme.muted,fontSize:"0.8rem",textAlign:"center",padding:"10px 0"}}>No rewards yet. Add something worth working for.</p>}
+
+      {/* Affordable rewards */}
+      {affordable.length>0 && (
+        <div style={{marginBottom:12}}>
+          {affordable.length>0 && locked.length>0 && <div style={{fontSize:"0.68rem",color:"#22c55e",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>✓ You can afford these</div>}
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {affordable.map(r=><RewardCard key={r.id} item={r}/>)}
+          </div>
+        </div>
+      )}
+
+      {/* Locked rewards */}
+      {locked.length>0 && (
+        <div>
+          {affordable.length>0 && <div style={{fontSize:"0.68rem",color:theme.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>🔒 Keep earning</div>}
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {locked.map(r=><RewardCard key={r.id} item={r}/>)}
+          </div>
+        </div>
+      )}
+
+      {/* Add/Edit modal */}
+      {showAdd && (
+        <Modal title={editItem?"Edit Reward":"New Reward"} onClose={()=>{setShowAdd(false);setEditItem(null);}} theme={theme}>
+          <div style={{marginBottom:12}}>
+            <label style={{display:"block",fontSize:"0.73rem",color:"#94a3b8",marginBottom:4}}>Emoji</label>
+            <input value={form.emoji} onChange={e=>setForm({...form,emoji:e.target.value})}
+              style={{width:60,background:"#1a2540",border:"1px solid #2d3f5a",borderRadius:7,padding:"8px",color:"#e2e8f0",fontSize:"1.2rem",textAlign:"center"}}/>
+          </div>
+          <div style={{marginBottom:12}}>
+            <label style={{display:"block",fontSize:"0.73rem",color:"#94a3b8",marginBottom:4}}>Reward Name</label>
+            <input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="e.g. Nice dinner out"
+              style={{width:"100%",background:"#1a2540",border:"1px solid #2d3f5a",borderRadius:7,padding:"8px 10px",color:"#e2e8f0",fontSize:"0.85rem",boxSizing:"border-box"}}/>
+          </div>
+          <div style={{marginBottom:12}}>
+            <label style={{display:"block",fontSize:"0.73rem",color:"#94a3b8",marginBottom:4}}>Description</label>
+            <textarea value={form.desc} onChange={e=>setForm({...form,desc:e.target.value})} placeholder="What does this mean to you?"
+              style={{width:"100%",background:"#1a2540",border:"1px solid #2d3f5a",borderRadius:7,padding:"8px 10px",color:"#e2e8f0",fontSize:"0.82rem",resize:"vertical",minHeight:60,boxSizing:"border-box"}}/>
+          </div>
+          <div style={{marginBottom:12}}>
+            <label style={{display:"block",fontSize:"0.73rem",color:"#94a3b8",marginBottom:6}}>Category</label>
+            <div style={{display:"flex",gap:6}}>
+              {Object.entries(REWARD_CATEGORIES).map(([k,v])=>(
+                <button key={k} onClick={()=>setForm({...form,category:k})}
+                  style={{flex:1,padding:"6px 4px",borderRadius:7,border:`1.5px solid ${form.category===k?theme.accent:theme.border}`,background:form.category===k?`${theme.accent}22`:"transparent",color:form.category===k?theme.accent:theme.muted,cursor:"pointer",fontSize:"0.7rem",textAlign:"center"}}>{v}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{marginBottom:16}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+              <label style={{fontSize:"0.73rem",color:"#94a3b8"}}>XP Cost</label>
+              <span style={{fontSize:"0.85rem",fontWeight:700,color:theme.accent}}>⚡ {form.cost} XP</span>
+            </div>
+            <input type="range" min={25} max={2000} step={25} value={form.cost} onChange={e=>setForm({...form,cost:Number(e.target.value)})}
+              style={{width:"100%",accentColor:theme.accent}}/>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:"0.62rem",color:theme.muted,marginTop:2}}>
+              <span>25 XP (~2 days)</span><span>2000 XP (~2 months)</span>
+            </div>
+          </div>
+          <button onClick={save} style={{width:"100%",background:theme.accent,border:"none",borderRadius:8,padding:"10px",color:"#000",fontWeight:700,cursor:"pointer",fontSize:"0.9rem"}}>
+            {editItem?"Save Changes":"Add to Store"}
+          </button>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function AssistantChat({data, theme, onAction}){
   const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState([]);
   const [input, setInput] = useState("");
@@ -1843,8 +2390,23 @@ function AssistantChat({data, theme}){
       const json = await response.json();
       if(json.error){ throw new Error(json.error.message||JSON.stringify(json.error)); }
       const blocks = (json.content||[]).filter(b=>b.type==="text");
-      const reply = blocks.map(b=>b.text).join("\n").trim() || "Nothing came back — try again.";
-      setMsgs(m=>[...m,{role:"assistant",content:reply}]);
+      const rawReply = blocks.map(b=>b.text).join("\n").trim() || "Nothing came back — try again.";
+
+      // Parse and execute any action tags
+      const actionMatches = rawReply.match(/<action>([\s\S]*?)<\/action>/g);
+      if(actionMatches && onAction) {
+        actionMatches.forEach(match => {
+          try {
+            const jsonStr = match.replace(/<\/?action>/g, '').trim();
+            const action = JSON.parse(jsonStr);
+            onAction(action);
+          } catch(e) { console.log("Action parse error:", e); }
+        });
+      }
+
+      // Remove action tags from displayed message
+      const displayReply = rawReply.replace(/<action>[\s\S]*?<\/action>/g, '').trim();
+      setMsgs(m=>[...m,{role:"assistant",content:displayReply}]);
     }catch(e){
       console.error("Chat error:", e);
       // Show full error detail for debugging
@@ -1911,9 +2473,25 @@ function AssistantChat({data, theme}){
             }}>
               {m.content}
               {m.role==="assistant"&&(
-                <button onClick={()=>speak(m.content)} style={{display:"block",marginTop:6,background:"none",border:"none",color:theme.muted,cursor:"pointer",fontSize:"0.65rem",padding:0}}>
-                  🔊 Read aloud
-                </button>
+                <div style={{display:"flex",gap:10,marginTop:6}}>
+                  <button onClick={()=>speak(m.content)} style={{background:"none",border:"none",color:theme.muted,cursor:"pointer",fontSize:"0.65rem",padding:0}}>
+                    🔊 Read aloud
+                  </button>
+                  <button onClick={()=>{
+                    if(onAction){
+                      // Extract a short title from first line, body is full message
+                      const lines = m.content.trim().split("\n");
+                      const title = lines[0].slice(0,50)+(lines[0].length>50?"...":"");
+                      onAction({type:"SAVE_CHAT_NOTE", title, body:m.content});
+                      // Brief visual confirmation
+                      const btn = document.activeElement;
+                      if(btn) btn.textContent = "✓ Saved";
+                      setTimeout(()=>{ if(btn) btn.textContent = "📝 Save as note"; }, 2000);
+                    }
+                  }} style={{background:"none",border:"none",color:theme.muted,cursor:"pointer",fontSize:"0.65rem",padding:0}}>
+                    📝 Save as note
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -1996,6 +2574,7 @@ function App(){
   const [newBadge,setNewBadge]=useState(null);
   const [toastXp,setToastXp]=useState(null);
   const [showMonthlyPrompt,setShowMonthlyPrompt]=useState(false);
+  const [goalCelebration,setGoalCelebration]=useState(null); // {type,restaurant}
 
   useEffect(()=>{
     (async()=>{
@@ -2007,13 +2586,15 @@ function App(){
           // Migrate: new habits not yet in saved data
           const savedTitles=new Set((saved.habits||[]).map(h=>h.title));
           const newHabits=DEFAULT_DATA.habits.filter(h=>!savedTitles.has(h.title));
-          // Patch morning workout: daily any-day + weeklyTarget:3
-          const patchedHabits=(saved.habits||[]).map(h=>{
-            if(h.title==="Morning workout"||h.title==="Evening workout"){
-              return{...h,title:"Evening workout",frequency:"daily",daysOfWeek:[0,1,2,3,4,5,6],weeklyTarget:h.weeklyTarget||3,monthlyGoals:h.monthlyGoals||{}};
-            }
-            return{...h,monthlyGoals:h.monthlyGoals||{}};
-          });
+          // Patch habits: rename Evening->Morning workout, remove Heat/sauna
+          const patchedHabits=(saved.habits||[])
+            .filter(h=>h.title!=="Heat/sauna")
+            .map(h=>{
+              if(h.title==="Morning workout"||h.title==="Evening workout"){
+                return{...h,title:"Morning workout",frequency:"daily",daysOfWeek:[0,1,2,3,4,5,6],weeklyTarget:h.weeklyTarget||3,monthlyGoals:h.monthlyGoals||{}};
+              }
+              return{...h,monthlyGoals:h.monthlyGoals||{}};
+            });
 
           // Migrate: Pilots schedule
           const hasPilots=(saved.events||[]).some(e=>e.title&&e.title.includes("Pilots"));
@@ -2029,8 +2610,12 @@ function App(){
             ...saved,
             events:mergedEvents,
             notes:saved.notes||[],
-            projects:saved.projects||DEFAULT_DATA.projects,
-            rewards:saved.rewards||DEFAULT_DATA.rewards,
+            projects:(saved.projects||DEFAULT_DATA.projects).map(p=>
+              p.title==="Learn Spanish"?{...p,title:"Spanish Practice"}:p
+            ),
+            rewards:{...(saved.rewards||DEFAULT_DATA.rewards), spendableXp:(saved.rewards?.spendableXp||saved.rewards?.xp||0)},
+            rewardStore:saved.rewardStore||DEFAULT_DATA.rewardStore,
+            goalRewards:saved.goalRewards||DEFAULT_DATA.goalRewards,
             habits:migratedHabits,
           };
           if(!hasPilots||newHabits.length>0){
@@ -2065,6 +2650,7 @@ function App(){
       const r=prev.rewards||{xp:0,badges:[],currentStreak:0,maxStreak:0,lastActiveDate:null,totalTodos:0,totalHabits:0,totalSteps:0,totalNotes:0,nightOwl:false,earlyBird:false};
       const oldLevel=calcLevel(r.xp);
       const newXp=(r.xp||0)+amount;
+      const newSpendable=(r.spendableXp||0)+amount;
       const newLevel=calcLevel(newXp);
       // streak
       const todayS=todayStr();
@@ -2074,7 +2660,7 @@ function App(){
       const maxStreak=Math.max(r.maxStreak||0,streak);
       // time badges
       const h=new Date().getHours();
-      const mergedStats={...r,...newStats,xp:newXp,currentStreak:streak,maxStreak,lastActiveDate:todayS,nightOwl:r.nightOwl||(h>=22),earlyBird:r.earlyBird||(h<7)};
+      const mergedStats={...r,...newStats,xp:newXp,spendableXp:newSpendable,currentStreak:streak,maxStreak,lastActiveDate:todayS,nightOwl:r.nightOwl||(h>=22),earlyBird:r.earlyBird||(h<7)};
       const newBadges=checkNewBadges(mergedStats,r.badges||[]);
       const updatedRewards={...mergedStats,badges:[...(r.badges||[]),...newBadges]};
       const updated={...prev,rewards:updatedRewards};
@@ -2085,6 +2671,45 @@ function App(){
       return updated;
     });
   },[]);
+
+  // Handle actions from the AI assistant
+  const handleAssistantAction = useCallback((action) => {
+    if(!action||!action.type) return;
+    setData(prev => {
+      if(!prev) return prev;
+      const d = {...prev, projects:prev.projects||[], notes:prev.notes||[]};
+      let updated = d;
+      switch(action.type) {
+        case 'ADD_TODO':
+          updated = {...d, todos:[...d.todos, {id:genId(), title:action.title, priority:action.priority||'medium', dueDate:action.dueDate||'', dueTime:action.dueTime||'', completed:false}]};
+          break;
+        case 'COMPLETE_TODO':
+          updated = {...d, todos:d.todos.map(t=>t.title.toLowerCase().includes(action.query.toLowerCase())?{...t,completed:true}:t)};
+          break;
+        case 'ADD_EVENT':
+          updated = {...d, events:[...d.events, {id:genId(), title:action.title, date:action.date||todayStr(), time:action.time||'', category:action.category||'other', notes:action.notes||''}]};
+          break;
+        case 'ADD_HABIT':
+          updated = {...d, habits:[...d.habits, {id:genId(), title:action.title, frequency:'daily', daysOfWeek:[0,1,2,3,4,5,6], completions:{}, monthlyGoals:{}, weeklyTarget:action.weeklyTarget||null}]};
+          break;
+        case 'ADD_NOTE':
+          updated = {...d, notes:[{id:genId(), title:action.title||'', body:action.body, pinned:false, createdAt:Date.now(), updatedAt:Date.now()}, ...d.notes]};
+          break;
+        case 'SAVE_CHAT_NOTE':
+          updated = {...d, notes:[{id:genId(), title:action.title||'From chat', body:action.body, pinned:false, createdAt:Date.now(), updatedAt:Date.now()}, ...d.notes]};
+          break;
+        case 'COMPLETE_HABIT':
+          updated = {...d, habits:d.habits.map(h=>h.title.toLowerCase().includes(action.query.toLowerCase())?{...h,completions:{...h.completions,[todayStr()]:true}}:h)};
+          break;
+        case 'COMPLETE_STEP':
+          updated = {...d, projects:d.projects.map(p=>p.title.toLowerCase().includes(action.project.toLowerCase())?{...p,lastProgressDate:todayStr(),steps:p.steps.map(s=>s.title.toLowerCase().includes(action.step.toLowerCase())?{...s,done:true}:s)}:p)};
+          break;
+        default: return prev;
+      }
+      pwaStorage.set(STORAGE_KEY, JSON.stringify(updated)).catch(()=>{});
+      return updated;
+    });
+  }, []);
 
   const processInput=text=>{
     if(!text.trim()||!data)return;
@@ -2104,12 +2729,13 @@ function App(){
 
   const themeBase=THEMES[data.settings.theme]||THEMES.dark;
   const theme={...themeBase,accent:data.settings.accent||themeBase.accent};
-  const safeD={...data,projects:data.projects||[],notes:data.notes||[],habits:(data.habits||[]).map(h=>({...h,monthlyGoals:h.monthlyGoals||{}}))};
+  const safeD={...data,projects:data.projects||[],notes:data.notes||[],habits:(data.habits||[]).map(h=>({...h,monthlyGoals:h.monthlyGoals||{}})),rewardStore:data.rewardStore||DEFAULT_DATA.rewardStore,goalRewards:data.goalRewards||DEFAULT_DATA.goalRewards};
 
   return(
     <div style={{minHeight:"100vh",background:theme.bg,color:theme.text,fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",padding:"12px 16px",maxWidth:680,margin:"0 auto",boxSizing:"border-box"}}>
       <ReminderAlert reminders={activeAlerts} accent={theme.accent} onDismiss={dismiss}/>
       {levelUpModal&&<LevelUpModal level={levelUpModal} accent={theme.accent} theme={theme} onClose={()=>setLevelUpModal(null)}/>}
+      {goalCelebration&&<GoalRewardCelebration type={goalCelebration.type} restaurant={goalCelebration.restaurant} theme={theme} accent={theme.accent} onClose={()=>setGoalCelebration(null)}/>}
       {showMonthlyPrompt&&(
         <MonthlyReviewModal habits={safeD.habits} theme={theme}
           onClose={()=>{setShowMonthlyPrompt(false);save({...safeD,settings:{...safeD.settings,lastMonthlyReview:monthKey()}});}}
@@ -2149,6 +2775,29 @@ function App(){
       <div style={{display:"flex",flexDirection:"column",gap:12}}>
         <TodaySummary events={safeD.events} todos={safeD.todos} habits={safeD.habits} projects={safeD.projects} theme={theme}/>
         <RewardsPanel rewards={safeD.rewards} theme={theme}/>
+        <GoalRewardPanel
+          habits={safeD.habits}
+          goalRewards={safeD.goalRewards||DEFAULT_DATA.goalRewards}
+          theme={theme}
+          onSave={gr=>save({...safeD,goalRewards:gr})}
+          onCelebrate={(type,restaurant)=>setGoalCelebration({type,restaurant})}
+        />
+        <RewardStorePanel
+          rewards={safeD.rewards}
+          rewardStore={safeD.rewardStore||[]}
+          theme={theme}
+          onRedeem={id=>{
+            const item=(safeD.rewardStore||[]).find(r=>r.id===id);
+            if(!item||( safeD.rewards?.spendableXp||0)<item.cost) return;
+            const newStore=(safeD.rewardStore||[]).map(r=>r.id===id?{...r,redeemed:(r.redeemed||0)+1}:r);
+            const newRewards={...safeD.rewards,spendableXp:(safeD.rewards?.spendableXp||0)-item.cost};
+            save({...safeD,rewardStore:newStore,rewards:newRewards});
+            showToast("🎉 "+item.emoji+" "+item.title+" — redeemed! You earned this.");
+          }}
+          onAdd={r=>save({...safeD,rewardStore:[...(safeD.rewardStore||[]),r]})}
+          onDelete={id=>save({...safeD,rewardStore:(safeD.rewardStore||[]).filter(r=>r.id!==id)})}
+          onEdit={r=>save({...safeD,rewardStore:(safeD.rewardStore||[]).map(x=>x.id===r.id?r:x)})}
+        />
         <WeatherWidget theme={theme}/>
         <CalendarPanel events={safeD.events} todos={safeD.todos} theme={theme}/>
         <ProjectsPanel
@@ -2187,7 +2836,7 @@ function App(){
       </div>
 
       {toast&&<Toast message={toast} accent={theme.accent} onDismiss={()=>{setToast(null);setToastXp(null);}} xp={toastXp}/>}
-      <AssistantChat data={safeD} theme={theme}/>
+      <AssistantChat data={safeD} theme={theme} onAction={handleAssistantAction}/>
     </div>
   );
 }
