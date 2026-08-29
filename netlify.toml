@@ -2,6 +2,10 @@
   publish = "."
   functions = "netlify/functions"
 
+[[scheduled-functions]]
+  name = "notify"
+  schedule = "0 3 * * *"  # 8pm Pacific Daylight Time (UTC-7) = 3:00 UTC
+
 [[headers]]
   for = "/*"
   [headers.values]
