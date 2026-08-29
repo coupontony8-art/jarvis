@@ -65,54 +65,57 @@ const pwaStorage = {
 };
 
 // ─── SERVICE WORKER REGISTRATION ─────────────────────────────────────────────
-if ('serviceWorker' in navigator) {
-  const swCode = `const CACHE_NAME = 'jarvis-v1';
-const ASSETS = ['/'];
+// ─── SERVICE WORKER + PUSH NOTIFICATIONS ──────────────────────────────────────
+const VAPID_PUBLIC_KEY = "BAV5SXA-S765KvT3ubscqOznZ_N6t1vzdGCXcsVsclyNKdfkuacbG_LcfJaqi1MZiOjl_ibOtH6Kf5y7Bmr2TAk";
 
-self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(ASSETS)));
-  self.skipWaiting();
-});
-
-self.addEventListener('activate', e => {
-  e.waitUntil(clients.claim());
-});
-
-self.addEventListener('fetch', e => {
-  // Network first, fall back to cache
-  e.respondWith(
-    fetch(e.request).catch(() => caches.match(e.request))
-  );
-});
-
-self.addEventListener('push', e => {
-  const data = e.data ? e.data.json() : { title: 'Jarvis', body: 'You have a reminder.' };
-  e.waitUntil(
-    self.registration.showNotification(data.title || 'Jarvis', {
-      body: data.body || '',
-      icon: '/icon-192.png',
-      badge: '/icon-192.png',
-      vibrate: [200, 100, 200],
-      tag: data.tag || 'jarvis-notif',
-      renotify: true,
-    })
-  );
-});
-
-self.addEventListener('notificationclick', e => {
-  e.notification.close();
-  e.waitUntil(clients.openWindow('/'));
-});
-`;
-  const blob = new Blob([swCode], { type: 'application/javascript' });
-  const swUrl = URL.createObjectURL(blob);
-  navigator.serviceWorker.register(swUrl, { scope: '/' }).catch(e => console.log('SW reg failed:', e));
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  return new Uint8Array([...raw].map(c => c.charCodeAt(0)));
 }
 
-// ─── PUSH NOTIFICATION HELPER ─────────────────────────────────────────────────
+async function registerPushSubscription(reg) {
+  try {
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+    }
+    // Save to server
+    await fetch('/.netlify/functions/save-subscription', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sub),
+    });
+    console.log('Push subscription saved');
+  } catch(e) {
+    console.log('Push subscription error:', e.message);
+  }
+}
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').then(async reg => {
+    console.log('SW registered');
+    // If permission already granted, subscribe immediately
+    if (Notification.permission === 'granted') {
+      await registerPushSubscription(reg);
+    }
+  }).catch(e => console.log('SW reg failed:', e.message));
+}
+
 window.requestNotificationPermission = async () => {
   if (!('Notification' in window)) return false;
   const perm = await Notification.requestPermission();
+  if (perm === 'granted') {
+    // Subscribe to push after permission granted
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      await registerPushSubscription(reg);
+    } catch(e) { console.log('Push sub failed:', e); }
+  }
   return perm === 'granted';
 };
 window.sendLocalNotification = (title, body, delay=0) => {
@@ -279,9 +282,10 @@ function sameMonthLastYearKey(mk){ const[y,m]=mk.split("-"); return`${parseInt(y
 function daysInMonthFromKey(mk){ const[y,m]=mk.split("-").map(Number); return new Date(y,m,0).getDate(); }
 function daysElapsedInMonth(mk){ const[y,m]=mk.split("-").map(Number); const now=new Date(); if(now.getFullYear()===y&&now.getMonth()===m-1) return now.getDate(); return daysInMonthFromKey(mk); }
 
-function calcHabitMonthRate(habit, mk){
+function calcHabitMonthRate(habit, mk, startDate){
   const[y,m]=mk.split("-").map(Number);
   const days=daysInMonthFromKey(mk);
+  const cutoff=startDate||"2000-01-01";
 
   if(habit.weeklyTarget){
     // Weekly-target mode: count weeks in month, goal = weeklyTarget per week
@@ -301,10 +305,13 @@ function calcHabitMonthRate(habit, mk){
     return target===0?null:Math.round((completions/target)*100);
   }
 
-  // Default: % of scheduled days completed
+  // Default: % of scheduled days completed (only from startDate onward)
+  const today=todayStr();
   let scheduled=0,completed=0;
   for(let d=1;d<=days;d++){
     const ds=`${y}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+    if(ds>today) continue;   // future
+    if(ds<cutoff) continue;  // before tracking start
     const dow=new Date(ds+"T12:00:00").getDay();
     const isScheduled=habit.frequency==="daily"||(habit.daysOfWeek||[]).includes(dow);
     if(isScheduled){ scheduled++; if(habit.completions?.[ds]) completed++; }
@@ -331,44 +338,50 @@ function getHabitGoal(habit, mk){
 
 // ─── GOAL REWARD HELPERS ─────────────────────────────────────────────────────
 function getWeekKey(date){
-  // ISO week: Monday-based
   const d = date ? new Date(date) : new Date();
-  const day = d.getDay(); // 0=Sun
-  const diff = d.getDate() - day + (day===0?-6:1); // Monday
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day===0?-6:1);
   const mon = new Date(d.setDate(diff));
   return mon.toISOString().slice(0,10);
 }
 function getCurrentWeekKey(){ return getWeekKey(new Date()); }
 
-function calcWeekHabitCompletion(habits, weekStartStr){
-  // For each day Mon-Sun of the week, check if ALL daily habits were done
+function calcWeekHabitCompletion(habits, weekStartStr, startDate){
   const start = new Date(weekStartStr+"T12:00:00");
+  const today = todayStr();
+  const cutoff = startDate || "2000-01-01";
   const dailyHabits = habits.filter(h=>h.frequency==="daily");
-  if(!dailyHabits.length) return {days:0, total:7, pct:0, allDays:[]};
-  let days = 0;
+  if(!dailyHabits.length) return {days:0, total:0, pct:0, allDays:[], tracked:0};
+  let days=0, tracked=0;
   const allDays = [];
   for(let i=0;i<7;i++){
     const d = new Date(start);
     d.setDate(start.getDate()+i);
     const ds = d.toISOString().slice(0,10);
-    // Only count up to today
-    if(ds > todayStr()){ allDays.push({date:ds,done:null}); continue; }
+    // Future days — skip, show as pending
+    if(ds > today){ allDays.push({date:ds,done:null}); continue; }
+    // Before tracking start date — skip entirely, don't count as missed
+    if(ds < cutoff){ allDays.push({date:ds,done:"skip"}); continue; }
+    tracked++;
     const allDone = dailyHabits.every(h=>h.completions?.[ds]);
     if(allDone) days++;
     allDays.push({date:ds, done:allDone});
   }
-  return {days, total:7, pct:Math.round((days/7)*100), allDays};
+  return {days, total:tracked, pct:tracked?Math.round((days/tracked)*100):0, allDays, tracked};
 }
 
-function calcMonthHabitCompletion(habits, mk){
+function calcMonthHabitCompletion(habits, mk, startDate){
   const [y,m] = mk.split("-").map(Number);
   const daysTotal = daysInMonthFromKey(mk);
+  const today = todayStr();
+  const cutoff = startDate || "2000-01-01";
   const dailyHabits = habits.filter(h=>h.frequency==="daily");
-  if(!dailyHabits.length) return {days:0, total:daysTotal, pct:0};
+  if(!dailyHabits.length) return {days:0, total:0, pct:0};
   let days=0, tracked=0;
   for(let d=1;d<=daysTotal;d++){
     const ds=`${y}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-    if(ds>todayStr()) continue;
+    if(ds>today) continue;        // future — skip
+    if(ds<cutoff) continue;       // before start date — skip, not a miss
     tracked++;
     if(dailyHabits.every(h=>h.completions?.[ds])) days++;
   }
@@ -412,7 +425,7 @@ function fmtMins(m){ if(m<60)return`${m}m`; return m%60===0?`${m/60}h`:`${Math.f
 function timeAgo(ts){ const d=Date.now()-ts; if(d<60000)return"just now"; if(d<3600000)return`${Math.floor(d/60000)}m ago`; if(d<86400000)return`${Math.floor(d/3600000)}h ago`; return`${Math.floor(d/86400000)}d ago`; }
 
 const DEFAULT_DATA = {
-  settings:{ name:"Tony", theme:"dark", accent:"#38bdf8" },
+  settings:{ name:"Tony", theme:"dark", accent:"#38bdf8", trackingStartDate:"2026-09-01" },
   rewards:{ xp:0, spendableXp:0, badges:[], currentStreak:0, maxStreak:0, lastActiveDate:null, totalTodos:0, totalHabits:0, totalSteps:0, totalNotes:0, nightOwl:false, earlyBird:false },
   goalRewards:{
     weekly:{
@@ -1348,7 +1361,7 @@ function TodoPanel({todos,theme,onAdd,onToggle,onDelete}){
 
 // ─── HABITS PANEL ─────────────────────────────────────────────────────────────
 // ─── MONTHLY REVIEW MODAL ────────────────────────────────────────────────────
-function MonthlyReviewModal({habits, theme, onClose, onSetGoal}){
+function MonthlyReviewModal({habits, theme, startDate, onClose, onSetGoal}){
   const mk=monthKey();
   const prevMk=prevMonthKey(mk);
   const lastYearMk=sameMonthLastYearKey(mk);
@@ -1361,8 +1374,8 @@ function MonthlyReviewModal({habits, theme, onClose, onSetGoal}){
   });
 
   const rows=habits.map(h=>{
-    const prevRate=calcHabitMonthRate(h,prevMk);
-    const lyRate=calcHabitMonthRate(h,lastYearMk);
+    const prevRate=calcHabitMonthRate(h,prevMk,startDate);
+    const lyRate=calcHabitMonthRate(h,lastYearMk,startDate);
     const suggested=calcGoalForHabit(h,mk);
     return{h,prevRate,lyRate,suggested,goal:goals[h.id]??suggested};
   });
@@ -1463,7 +1476,7 @@ function MonthlyReviewModal({habits, theme, onClose, onSetGoal}){
   );
 }
 
-function HabitsPanel({habits,theme,onAdd,onToggleDay,onDelete,onSetGoals}){
+function HabitsPanel({habits,theme,startDate,onAdd,onToggleDay,onDelete,onSetGoals}){
   const [showModal,setShowModal]=useState(false);
   const [showReview,setShowReview]=useState(false);
   const [form,setForm]=useState({title:"",frequency:"daily",daysOfWeek:[0,1,2,3,4,5,6],weeklyTarget:null});
@@ -1489,7 +1502,7 @@ function HabitsPanel({habits,theme,onAdd,onToggleDay,onDelete,onSetGoals}){
           {relevant.map(h=>{
             const mk=monthKey();
             const goal=getHabitGoal(h,mk);
-            const rate=calcHabitMonthRate(h,mk)??0;
+            const rate=calcHabitMonthRate(h,mk,startDate)??0;
             const color=rate>=goal?"#22c55e":rate>=goal*0.8?"#f59e0b":"#ef4444";
             return(
               <div key={h.id+"-goal"} style={{display:"flex",alignItems:"center",gap:8}}>
@@ -1523,7 +1536,7 @@ function HabitsPanel({habits,theme,onAdd,onToggleDay,onDelete,onSetGoals}){
         </div>
       )}
       {showReview&&(
-        <MonthlyReviewModal habits={habits} theme={theme}
+        <MonthlyReviewModal habits={habits} theme={theme} startDate={startDate}
           onClose={()=>setShowReview(false)}
           onSetGoal={goals=>{
             const updated=habits.map(h=>({...h,monthlyGoals:{...h.monthlyGoals||{},[monthKey()]:goals[h.id]}}));
@@ -1808,6 +1821,12 @@ function SettingsPanel({settings,theme,onSave,onClose}){
     <div style={{background:theme.panel,border:`1px solid ${theme.border}`,borderRadius:10,padding:14}}>
       <SectionHeader title="Settings" accent={theme.accent} action={<button onClick={onClose} style={{background:"none",border:"none",color:theme.muted,cursor:"pointer",fontSize:"1rem"}}>✕</button>}/>
       <Inp label="Your Name" value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Tony"/>
+      <div style={{marginBottom:12}}>
+        <label style={{display:"block",fontSize:"0.73rem",color:"#94a3b8",marginBottom:4}}>Tracking Start Date</label>
+        <input type="date" value={form.trackingStartDate||"2026-09-01"} onChange={e=>setForm({...form,trackingStartDate:e.target.value})}
+          style={{width:"100%",background:"#1a2540",border:"1px solid #2d3f5a",borderRadius:7,padding:"8px 10px",color:"#e2e8f0",fontSize:"0.85rem",boxSizing:"border-box"}}/>
+        <div style={{fontSize:"0.65rem",color:"#64748b",marginTop:3}}>Habits before this date won't count as missed days</div>
+      </div>
 
       <div style={{marginBottom:12}}>
         <label style={{display:"block",fontSize:"0.73rem",color:"#94a3b8",marginBottom:6}}>Theme</label>
@@ -1821,6 +1840,22 @@ function SettingsPanel({settings,theme,onSave,onClose}){
         <label style={{display:"block",fontSize:"0.73rem",color:"#94a3b8",marginBottom:6}}>Accent Color</label>
         <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
           {ACCENT_OPTIONS.map(c=><button key={c} onClick={()=>setForm({...form,accent:c})} style={{width:28,height:28,borderRadius:"50%",background:c,border:`3px solid ${form.accent===c?"#fff":"transparent"}`,cursor:"pointer",padding:0,transition:"border 0.15s"}}/>)}
+        </div>
+      </div>
+      <div style={{marginBottom:12}}>
+        <div style={{fontSize:"0.73rem",color:"#94a3b8",marginBottom:6}}>Notifications</div>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={async()=>{
+            const ok = await window.requestNotificationPermission();
+            if(ok) alert("Notifications enabled! You'll get a morning briefing at 8am Pacific.");
+            else alert("Notifications blocked. Check your browser settings.");
+          }} style={{flex:1,background:"transparent",border:`1px solid ${theme.border}`,borderRadius:7,padding:"8px",color:theme.muted,cursor:"pointer",fontSize:"0.75rem"}}>
+            🔔 Enable push notifications
+          </button>
+          <button onClick={()=>window.sendLocalNotification("Jarvis","This is what your notifications look like. Nice.")} 
+            style={{flex:1,background:"transparent",border:`1px solid ${theme.border}`,borderRadius:7,padding:"8px",color:theme.muted,cursor:"pointer",fontSize:"0.75rem"}}>
+            🧪 Test notification
+          </button>
         </div>
       </div>
       <button onClick={()=>onSave(form)} style={{width:"100%",background:theme.accent,border:"none",borderRadius:8,padding:"10px",color:"#000",fontWeight:700,cursor:"pointer",fontSize:"0.9rem"}}>Save Settings</button>
@@ -1893,7 +1928,7 @@ function buildSystemPrompt(data, weatherRef){
 // ─── REWARD STORE ─────────────────────────────────────────────────────────────
 
 // ─── GOAL REWARD PANEL ────────────────────────────────────────────────────────
-function GoalRewardPanel({habits, goalRewards, theme, onSave, onCelebrate}){
+function GoalRewardPanel({habits, goalRewards, startDate, theme, onSave, onCelebrate}){
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
     weeklyRestaurant: goalRewards?.weekly?.restaurant||"",
@@ -1905,9 +1940,9 @@ function GoalRewardPanel({habits, goalRewards, theme, onSave, onCelebrate}){
 
   const wk = getCurrentWeekKey();
   const mk = monthKey();
-  const weekStats = calcWeekHabitCompletion(habits, wk);
-  const monthStats = calcMonthHabitCompletion(habits, mk);
-  const weekEarned = weekStats.days === 7;
+  const weekStats = calcWeekHabitCompletion(habits, wk, startDate);
+  const monthStats = calcMonthHabitCompletion(habits, mk, startDate);
+  const weekEarned = weekStats.tracked > 0 && weekStats.days === weekStats.tracked;
   const monthEarned = monthStats.pct >= (goalRewards?.monthly?.pctRequired||80);
   const weekAlreadyClaimed = goalRewards?.weekly?.lastEarnedWeek === wk;
   const monthAlreadyClaimed = goalRewards?.monthly?.lastEarnedMonth === mk;
@@ -2010,6 +2045,7 @@ function GoalRewardPanel({habits, goalRewards, theme, onSave, onCelebrate}){
               {DAYLETTERS.map((letter,i)=>{
                 const dayData = weekStats.allDays[i];
                 const isToday = i===todayIdx;
+                const isSkipped = dayData?.done==="skip";
                 const isFuture = !dayData || dayData.done===null;
                 const isDone = dayData?.done===true;
                 const isMissed = dayData?.done===false;
@@ -2614,6 +2650,7 @@ function App(){
               p.title==="Learn Spanish"?{...p,title:"Spanish Practice"}:p
             ),
             rewards:{...(saved.rewards||DEFAULT_DATA.rewards), spendableXp:(saved.rewards?.spendableXp||saved.rewards?.xp||0)},
+            settings:{...(saved.settings||DEFAULT_DATA.settings), trackingStartDate:saved.settings?.trackingStartDate||"2026-09-01"},
             rewardStore:saved.rewardStore||DEFAULT_DATA.rewardStore,
             goalRewards:saved.goalRewards||DEFAULT_DATA.goalRewards,
             habits:migratedHabits,
@@ -2778,6 +2815,7 @@ function App(){
         <GoalRewardPanel
           habits={safeD.habits}
           goalRewards={safeD.goalRewards||DEFAULT_DATA.goalRewards}
+          startDate={safeD.settings?.trackingStartDate||"2026-09-01"}
           theme={theme}
           onSave={gr=>save({...safeD,goalRewards:gr})}
           onCelebrate={(type,restaurant)=>setGoalCelebration({type,restaurant})}
@@ -2823,7 +2861,7 @@ function App(){
               save({...safeD,todos:safeD.todos.map(t=>t.id===id?{...t,completed:!t.completed}:t)});
               if(completing){earnXP(XP_PER_TODO,{totalTodos:(safeD.rewards?.totalTodos||0)+1});showToast(pick(QUIPS.todoComplete));}
             }} onDelete={id=>save({...safeD,todos:safeD.todos.filter(t=>t.id!==id)})}/>
-        <HabitsPanel habits={safeD.habits} theme={theme} onSetGoals={updated=>save({...safeD,habits:updated})} onAdd={h=>save({...safeD,habits:[...safeD.habits,h]})} onToggleDay={(id,date)=>{
+        <HabitsPanel habits={safeD.habits} theme={theme} startDate={safeD.settings?.trackingStartDate||"2026-09-01"} onSetGoals={updated=>save({...safeD,habits:updated})} onAdd={h=>save({...safeD,habits:[...safeD.habits,h]})} onToggleDay={(id,date)=>{
               const h=safeD.habits.find(h=>h.id===id);
               const wasOff=h&&!h.completions?.[date];
               save({...safeD,habits:safeD.habits.map(h=>h.id===id?{...h,completions:{...h.completions,[date]:!h.completions?.[date]}}:h)});
