@@ -37,7 +37,7 @@ exports.handler = async (event) => {
   let data;
   try {
     const res = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
-      headers: { "X-Access-Key": API_KEY },
+      headers: { "X-Master-Key": API_KEY },
     });
     const json = await res.json();
     data = json.record;
