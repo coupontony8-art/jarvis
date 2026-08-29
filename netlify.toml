@@ -4,7 +4,11 @@
 
 [[scheduled-functions]]
   name = "notify"
-  schedule = "0 3 * * *"  # 8pm Pacific Daylight Time (UTC-7) = 3:00 UTC
+  schedule = "0 3 * * *"  # 8pm Pacific Daylight Time = 3:00 UTC
+
+[[scheduled-functions]]
+  name = "check-reminders"
+  schedule = "*/30 * * * *"  # Every 30 minutes
 
 [[headers]]
   for = "/*"
