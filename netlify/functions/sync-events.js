@@ -1,5 +1,4 @@
 // Netlify function — receives upcoming events/todos from the app and stores in JSONBin
-// Called by the app on load and whenever events are added
 
 const BIN_ID = process.env.JSONBIN_BIN_ID;
 const API_KEY = process.env.JSONBIN_API_KEY;
@@ -22,7 +21,11 @@ exports.handler = async (event) => {
   }
 
   if (!BIN_ID || !API_KEY) {
-    return { statusCode: 500, body: JSON.stringify({ error: "JSONBin not configured" }) };
+    return {
+      statusCode: 500,
+      headers: { "Access-Control-Allow-Origin": "*" },
+      body: JSON.stringify({ error: "JSONBin env vars not set", BIN_ID: !!BIN_ID, API_KEY: !!API_KEY }),
+    };
   }
 
   let payload;
@@ -32,32 +35,44 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: "Invalid JSON" }) };
   }
 
+  const data = {
+    events: payload.events || [],
+    todos: payload.todos || [],
+    updatedAt: new Date().toISOString(),
+  };
+
+  console.log("Writing to JSONBin:", BIN_ID, "Events:", data.events.length, "Todos:", data.todos.length);
+
   try {
+    // JSONBin v3 PUT to update bin content
     const response = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
-        "X-Access-Key": API_KEY,
+        "X-Master-Key": API_KEY,  // Master key uses X-Master-Key header
         "X-Bin-Versioning": "false",
       },
-      body: JSON.stringify({
-        events: payload.events || [],
-        todos: payload.todos || [],
-        updatedAt: new Date().toISOString(),
-      }),
+      body: JSON.stringify(data),
     });
 
+    const responseText = await response.text();
+    console.log("JSONBin response:", response.status, responseText);
+
     if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`JSONBin error: ${err}`);
+      return {
+        statusCode: 500,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        body: JSON.stringify({ error: "JSONBin write failed", status: response.status, detail: responseText }),
+      };
     }
 
     return {
       statusCode: 200,
       headers: { "Access-Control-Allow-Origin": "*" },
-      body: JSON.stringify({ ok: true }),
+      body: JSON.stringify({ ok: true, events: data.events.length, todos: data.todos.length }),
     };
   } catch (e) {
+    console.error("Fetch error:", e.message);
     return {
       statusCode: 500,
       headers: { "Access-Control-Allow-Origin": "*" },
