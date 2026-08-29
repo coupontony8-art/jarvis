@@ -65,65 +65,48 @@ const pwaStorage = {
 };
 
 // ─── SERVICE WORKER REGISTRATION ─────────────────────────────────────────────
-// ─── SERVICE WORKER + PUSH NOTIFICATIONS ──────────────────────────────────────
-const VAPID_PUBLIC_KEY = "BAV5SXA-S765KvT3ubscqOznZ_N6t1vzdGCXcsVsclyNKdfkuacbG_LcfJaqi1MZiOjl_ibOtH6Kf5y7Bmr2TAk";
-
-function urlBase64ToUint8Array(base64String) {
-  const padding = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const raw = atob(base64);
-  return new Uint8Array([...raw].map(c => c.charCodeAt(0)));
-}
-
-async function registerPushSubscription(reg) {
+// ─── NTFY NOTIFICATION HELPER ────────────────────────────────────────────────
+async function sendNotification(title, message, priority="default", tags=["bell"]) {
   try {
-    let sub = await reg.pushManager.getSubscription();
-    if (!sub) {
-      sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-      });
-    }
-    // Save to server
-    await fetch('/.netlify/functions/save-subscription', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(sub),
+    await fetch("/.netlify/functions/notify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, message, priority, tags }),
     });
-    console.log('Push subscription saved');
   } catch(e) {
-    console.log('Push subscription error:', e.message);
+    console.log("Notification failed:", e.message);
   }
 }
 
+// ─── SERVER SYNC (for contextual push notifications) ─────────────────────────
+async function syncEventsToServer(events, todos) {
+  try {
+    // Only sync events in the next 7 days and todos due soon
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() + 7);
+    const cutoffStr = cutoff.toISOString().slice(0,10);
+    const upcoming = (events||[]).filter(e => e.date && e.date >= new Date().toISOString().slice(0,10) && e.date <= cutoffStr);
+    const dueTodos = (todos||[]).filter(t => !t.completed && t.dueDate && t.dueDate >= new Date().toISOString().slice(0,10) && t.dueDate <= cutoffStr);
+    await fetch("/.netlify/functions/sync-events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ events: upcoming, todos: dueTodos }),
+    });
+  } catch(e) {
+    console.log("Sync failed:", e.message);
+  }
+}
+
+// ─── SERVICE WORKER (offline caching only) ───────────────────────────────────
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').then(async reg => {
-    console.log('SW registered');
-    // If permission already granted, subscribe immediately
-    if (Notification.permission === 'granted') {
-      await registerPushSubscription(reg);
-    }
-  }).catch(e => console.log('SW reg failed:', e.message));
+  navigator.serviceWorker.register('/sw.js')
+    .then(() => console.log('SW registered'))
+    .catch(e => console.log('SW failed:', e.message));
 }
 
-window.requestNotificationPermission = async () => {
-  if (!('Notification' in window)) return false;
-  const perm = await Notification.requestPermission();
-  if (perm === 'granted') {
-    // Subscribe to push after permission granted
-    try {
-      const reg = await navigator.serviceWorker.ready;
-      await registerPushSubscription(reg);
-    } catch(e) { console.log('Push sub failed:', e); }
-  }
-  return perm === 'granted';
-};
+window.requestNotificationPermission = async () => true;
 window.sendLocalNotification = (title, body, delay=0) => {
-  setTimeout(() => {
-    if (Notification.permission === 'granted') {
-      new Notification(title, { body, icon: '', badge: '' });
-    }
-  }, delay);
+  setTimeout(() => sendNotification(title, body), delay);
 };
 </script>
 
@@ -815,6 +798,16 @@ function RewardsPanel({rewards,theme}){
 }
 
 function ReminderAlert({reminders,accent,onDismiss}){
+  // Fire ntfy notification for new reminders
+  useEffect(()=>{
+    reminders.forEach(r=>{
+      const key="ntfy_sent_"+r.id;
+      if(!sessionStorage.getItem(key)){
+        sessionStorage.setItem(key,"1");
+        sendNotification("⏰ "+r.title, r.time?"At "+r.time:"", "high", ["alarm_clock"]);
+      }
+    });
+  },[reminders]);
   if(!reminders.length)return null;
   return(
     <div style={{position:"fixed",top:16,right:16,zIndex:3000,display:"flex",flexDirection:"column",gap:8,maxWidth:300}}>
@@ -1846,15 +1839,10 @@ function SettingsPanel({settings,theme,onSave,onClose}){
         <div style={{fontSize:"0.73rem",color:"#94a3b8",marginBottom:6}}>Notifications</div>
         <div style={{display:"flex",gap:8}}>
           <button onClick={async()=>{
-            const ok = await window.requestNotificationPermission();
-            if(ok) alert("Notifications enabled! You'll get a morning briefing at 8am Pacific.");
-            else alert("Notifications blocked. Check your browser settings.");
+            await sendNotification("Jarvis","Notifications are working. Hell yeah.","default",["white_check_mark"]);
+            alert("Test sent! Check your ntfy app.");
           }} style={{flex:1,background:"transparent",border:`1px solid ${theme.border}`,borderRadius:7,padding:"8px",color:theme.muted,cursor:"pointer",fontSize:"0.75rem"}}>
-            🔔 Enable push notifications
-          </button>
-          <button onClick={()=>window.sendLocalNotification("Jarvis","This is what your notifications look like. Nice.")} 
-            style={{flex:1,background:"transparent",border:`1px solid ${theme.border}`,borderRadius:7,padding:"8px",color:theme.muted,cursor:"pointer",fontSize:"0.75rem"}}>
-            🧪 Test notification
+            🧪 Test ntfy notification
           </button>
         </div>
       </div>
@@ -2664,6 +2652,8 @@ function App(){
           const mk=monthKey();
           const lastReview=saved.settings?.lastMonthlyReview;
           if(lastReview!==mk){ setTimeout(()=>setShowMonthlyPrompt(true),2000); }
+          // Sync upcoming events to server for contextual push notifications
+          setTimeout(()=>syncEventsToServer(finalData.events||[], finalData.todos||[]), 3000);
         } else {
           setData(DEFAULT_DATA);
           setTimeout(()=>setShowMonthlyPrompt(true),2000);
@@ -2854,8 +2844,8 @@ function App(){
           onUpdate={n=>save({...safeD,notes:safeD.notes.map(x=>x.id===n.id?n:x)})}
           onDelete={id=>save({...safeD,notes:safeD.notes.filter(n=>n.id!==id)})}
         />
-        <EventsPanel events={safeD.events} theme={theme} onAdd={ev=>save({...safeD,events:[...safeD.events,ev]})} onDelete={id=>save({...safeD,events:safeD.events.filter(e=>e.id!==id)})}/>
-        <TodoPanel todos={safeD.todos} theme={theme} onAdd={t=>save({...safeD,todos:[...safeD.todos,t]})} onToggle={id=>{
+        <EventsPanel events={safeD.events} theme={theme} onAdd={ev=>{const updated={...safeD,events:[...safeD.events,ev]};save(updated);syncEventsToServer(updated.events,updated.todos);}} onDelete={id=>save({...safeD,events:safeD.events.filter(e=>e.id!==id)})}/>
+        <TodoPanel todos={safeD.todos} theme={theme} onAdd={t=>{const updated={...safeD,todos:[...safeD.todos,t]};save(updated);syncEventsToServer(updated.events,updated.todos);}} onToggle={id=>{
               const t=safeD.todos.find(t=>t.id===id);
               const completing=t&&!t.completed;
               save({...safeD,todos:safeD.todos.map(t=>t.id===id?{...t,completed:!t.completed}:t)});
