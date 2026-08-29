@@ -81,17 +81,24 @@ async function sendNotification(title, message, priority="default", tags=["bell"
 // ─── SERVER SYNC (for contextual push notifications) ─────────────────────────
 async function syncEventsToServer(events, todos) {
   try {
-    // Only sync events in the next 7 days and todos due soon
+    const today = new Date().toISOString().slice(0,10);
     const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() + 7);
+    cutoff.setDate(cutoff.getDate() + 14);
     const cutoffStr = cutoff.toISOString().slice(0,10);
-    const upcoming = (events||[]).filter(e => e.date && e.date >= new Date().toISOString().slice(0,10) && e.date <= cutoffStr);
-    const dueTodos = (todos||[]).filter(t => !t.completed && t.dueDate && t.dueDate >= new Date().toISOString().slice(0,10) && t.dueDate <= cutoffStr);
-    await fetch("/.netlify/functions/sync-events", {
+    // Include all future events in next 14 days
+    const upcoming = (events||[]).filter(e => e.date && e.date >= today && e.date <= cutoffStr);
+    // Include all active todos
+    const activeTodos = (todos||[]).filter(t => !t.completed);
+    const payload = { events: upcoming, todos: activeTodos };
+    console.log("Syncing to server:", upcoming.length, "events,", activeTodos.length, "todos");
+    const res = await fetch("/.netlify/functions/sync-events", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ events: upcoming, todos: dueTodos }),
+      body: JSON.stringify(payload),
     });
+    const result = await res.json();
+    console.log("Sync result:", res.status, result);
+    return result;
   } catch(e) {
     console.log("Sync failed:", e.message);
   }
@@ -1837,12 +1844,19 @@ function SettingsPanel({settings,theme,onSave,onClose}){
       </div>
       <div style={{marginBottom:12}}>
         <div style={{fontSize:"0.73rem",color:"#94a3b8",marginBottom:6}}>Notifications</div>
-        <div style={{display:"flex",gap:8}}>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
           <button onClick={async()=>{
             await sendNotification("Jarvis","Notifications are working. Hell yeah.","default",["white_check_mark"]);
             alert("Test sent! Check your ntfy app.");
           }} style={{flex:1,background:"transparent",border:`1px solid ${theme.border}`,borderRadius:7,padding:"8px",color:theme.muted,cursor:"pointer",fontSize:"0.75rem"}}>
-            🧪 Test ntfy notification
+            🧪 Test ntfy
+          </button>
+          <button onClick={async()=>{
+            const d = JSON.parse(localStorage.getItem("jarvis_data_v7")||"{}");
+            const result = await syncEventsToServer(d.events||[], d.todos||[]);
+            alert(result ? "Synced! Check JSONBin." : "Sync failed — check console.");
+          }} style={{flex:1,background:"transparent",border:`1px solid ${theme.border}`,borderRadius:7,padding:"8px",color:theme.muted,cursor:"pointer",fontSize:"0.75rem"}}>
+            🔄 Sync schedule
           </button>
         </div>
       </div>
