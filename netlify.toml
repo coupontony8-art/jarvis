@@ -2,8 +2,13 @@
   publish = "."
   functions = "netlify/functions"
 
+[[scheduled-functions]]
+  name = "morning-brief"
+  schedule = "0 15 * * *"  # 8am Pacific (UTC-7 in summer) = 15:00 UTC
+
 [[headers]]
   for = "/*"
   [headers.values]
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
+    
