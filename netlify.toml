@@ -2,21 +2,20 @@
   publish = "."
   functions = "netlify/functions"
 
-[[scheduled-functions]]
-  name = "notify"
-  schedule = "0 3,4 * * *"  # 8pm Pacific: 03:00 UTC (PDT) / 04:00 UTC (PST); function sends only the right one
+# Scheduled functions — Netlify syntax is [functions."<file name>"] schedule = "<cron>".
+# Cron runs in UTC; functions that need a Pacific time are scheduled at both
+# possible UTC hours and skip the run that isn't the right Pacific time.
+[functions."evening-checkin"]
+  schedule = "0 3,4 * * *"       # 8pm Pacific: 03:00 UTC (PDT) / 04:00 UTC (PST)
 
-[[scheduled-functions]]
-  name = "check-reminders"
-  schedule = "*/30 * * * *"  # Every 30 minutes
+[functions."check-reminders"]
+  schedule = "*/30 * * * *"      # every 30 minutes
 
-[[scheduled-functions]]
-  name = "fantasy-thursday"
-  schedule = "30 0,23 * * 4,5"  # Thu 4:30pm Pacific: Thu 23:30 UTC (PDT) / Fri 00:30 UTC (PST); function filters
+[functions."fantasy-thursday"]
+  schedule = "30 0,23 * * 4,5"   # Thu 4:30pm Pacific: Thu 23:30 UTC (PDT) / Fri 00:30 UTC (PST)
 
-[[scheduled-functions]]
-  name = "fantasy-sunday"
-  schedule = "30 16,17 * * 0"  # Sun 9:30am Pacific: 16:30 UTC (PDT) / 17:30 UTC (PST); function filters
+[functions."fantasy-sunday"]
+  schedule = "30 16,17 * * 0"    # Sun 9:30am Pacific: 16:30 UTC (PDT) / 17:30 UTC (PST)
 
 [[headers]]
   for = "/*"

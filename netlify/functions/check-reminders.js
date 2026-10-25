@@ -78,46 +78,48 @@ exports.handler = async (event) => {
 
   // Current time in Pacific (handles daylight saving automatically)
   const { todayStr, nowMins, dow } = pacificNow(new Date());
+  // Runs are scheduled on :00/:30 but can start a few minutes late. Windows are
+  // decided by the scheduled slot so a late run never double-sends or skips.
+  const slotMins = nowMins - (nowMins % 30);
 
   const notifications = [];
 
-  // Check events for today with a time
+  // Runs every 30 min, so each alert gets a 30-minute window: every event/todo
+  // lands in exactly one run per window, whatever minute it starts at.
+  const inWindow = (diff, lo, hi) => diff >= lo && diff < hi;
+  const minsLabel = m => (m <= 1 ? "now" : `in ${m} min`);
+
+  // Events today with a time: heads-up 30–59 min before, then a "soon" alert 0–29 min before
   for (const ev of events) {
     if (!ev.date || !ev.time || ev.date !== todayStr) continue;
     const [eh, em] = ev.time.split(":").map(Number);
-    const evMins = eh * 60 + em;
-    const diff = evMins - nowMins;
-
-    // 30-minute warning
-    if (diff > 28 && diff <= 32) {
+    const diff = eh * 60 + em - nowMins;       // real minutes left (for the title)
+    const slotDiff = eh * 60 + em - slotMins;  // decides the window
+    if (inWindow(slotDiff, 30, 60)) {
       notifications.push({
-        title: `⏰ ${ev.title} in 30 min`,
+        title: `⏰ ${ev.title} ${minsLabel(diff)}`,
         message: `${ev.title} at ${formatTime(ev.time)}${ev.notes ? " — " + ev.notes : ""}`,
         priority: "high",
         tags: ["alarm_clock"],
       });
-    }
-    // On-time alert
-    if (diff > -2 && diff <= 2) {
+    } else if (inWindow(slotDiff, 0, 30)) {
       notifications.push({
-        title: `🔔 ${ev.title} now`,
-        message: `${ev.title} is starting now.${ev.notes ? " " + ev.notes : ""}`,
+        title: `🔔 ${ev.title} ${minsLabel(Math.max(diff, 0))}`,
+        message: `${ev.title} at ${formatTime(ev.time)}.${ev.notes ? " " + ev.notes : ""}`,
         priority: "urgent",
         tags: ["rotating_light"],
       });
     }
   }
 
-  // Check todos due today
+  // Todos due today with a time: one alert 0–29 min before
   for (const t of todos) {
-    if (!t.dueDate || t.dueDate !== todayStr || t.completed) continue;
-    if (!t.dueTime) continue;
+    if (!t.dueDate || t.dueDate !== todayStr || t.completed || !t.dueTime) continue;
     const [th, tm] = t.dueTime.split(":").map(Number);
-    const tMins = th * 60 + tm;
-    const diff = tMins - nowMins;
-    if (diff > 28 && diff <= 32) {
+    const diff = th * 60 + tm - nowMins;
+    if (inWindow(th * 60 + tm - slotMins, 0, 30)) {
       notifications.push({
-        title: `📋 Due soon: ${t.title}`,
+        title: `📋 Due ${minsLabel(Math.max(diff, 0))}: ${t.title}`,
         message: `"${t.title}" is due at ${formatTime(t.dueTime)}`,
         priority: "high",
         tags: ["pushpin"],
@@ -128,7 +130,7 @@ exports.handler = async (event) => {
   // Habit reminders (e.g. Spanish plan)
   const habits = data?.habits || [];
   for (const h of habits) {
-    if (!habitReminderDue(h, todayStr, nowMins, dow)) continue;
+    if (!habitReminderDue(h, todayStr, slotMins, dow)) continue;
     const firstSentence = (h.detail || "").split(/(?<=\.)\s/)[0];
     notifications.push({
       title: `${h.title}${h.durationMin ? " · " + h.durationMin + " min" : ""}`,
