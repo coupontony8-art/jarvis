@@ -150,10 +150,6 @@ const DAYS            = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const DAYS_FULL       = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 const MONTHS          = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const NOTE_COLORS     = ["#1e2d45","#1a2e1a","#2e1a1a","#2a1e2e","#2e2a1a"];
-const XP_PER_TODO    = 10;
-const XP_PER_HABIT   = 15;
-const XP_PER_STEP    = 25;
-const XP_PER_LEVEL   = 100;
 
 // ─── PERSONALITY ENGINE ───────────────────────────────────────────────────────
 const QUIPS = {
@@ -489,33 +485,6 @@ function calcClaimStreak(claims){
   return streak;
 }
 
-// ─── XP + LEVEL HELPERS ────────────────────────────────────────────────────────
-function calcLevel(xp){ return Math.floor(xp/XP_PER_LEVEL)+1; }
-function xpForNext(xp){ return XP_PER_LEVEL-(xp%XP_PER_LEVEL); }
-function xpProgress(xp){ return (xp%XP_PER_LEVEL)/XP_PER_LEVEL; }
-
-// ─── BADGE DEFINITIONS ────────────────────────────────────────────────────────
-const BADGE_DEFS = [
-  {id:"first_todo",   icon:"✅", name:"First Blood",      desc:"Completed your first task",          check:(s)=>s.totalTodos>=1},
-  {id:"todo_10",      icon:"📋", name:"List Slayer",       desc:"Completed 10 tasks",                 check:(s)=>s.totalTodos>=10},
-  {id:"todo_50",      icon:"⚡", name:"Task Machine",      desc:"Completed 50 tasks",                 check:(s)=>s.totalTodos>=50},
-  {id:"first_habit",  icon:"🔥", name:"Creature of Habit", desc:"Completed a habit for the first time",check:(s)=>s.totalHabits>=1},
-  {id:"streak_3",     icon:"📅", name:"3-Day Streak",      desc:"3 days of activity in a row",        check:(s)=>s.maxStreak>=3},
-  {id:"streak_7",     icon:"🗓️", name:"Week Warrior",      desc:"7-day activity streak",              check:(s)=>s.maxStreak>=7},
-  {id:"streak_30",    icon:"🏆", name:"Iron Discipline",   desc:"30-day activity streak",             check:(s)=>s.maxStreak>=30},
-  {id:"first_step",   icon:"🚀", name:"In Motion",         desc:"Completed a project step",           check:(s)=>s.totalSteps>=1},
-  {id:"steps_10",     icon:"🛠️", name:"Getting After It",  desc:"Completed 10 project steps",         check:(s)=>s.totalSteps>=10},
-  {id:"level_5",      icon:"⭐", name:"Level 5",           desc:"Reached level 5",                    check:(s)=>calcLevel(s.xp)>=5},
-  {id:"level_10",     icon:"💫", name:"Level 10",          desc:"Reached level 10",                   check:(s)=>calcLevel(s.xp)>=10},
-  {id:"first_note",   icon:"📝", name:"Brain Dump",        desc:"Saved your first note",              check:(s)=>s.totalNotes>=1},
-  {id:"night_owl",    icon:"🦉", name:"Night Owl",         desc:"Completed a task after 10pm",        check:(s)=>s.nightOwl},
-  {id:"early_bird",   icon:"🐦", name:"Early Bird",        desc:"Completed a task before 7am",        check:(s)=>s.earlyBird},
-];
-
-function checkNewBadges(stats, earnedIds){
-  return BADGE_DEFS.filter(b=>!earnedIds.includes(b.id)&&b.check(stats)).map(b=>b.id);
-}
-
 function localDateStr(d){ d=d||new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
 function genId()    { return Date.now().toString(36)+Math.random().toString(36).slice(2); }
 function todayStr() { return localDateStr(new Date()); }
@@ -554,13 +523,12 @@ const SPANISH_TRACK = {
   fallbackRule:{ name:"Week-fell-apart minimum",
     detail:"If the week collapses, the only non-negotiables are Pimsleur audio + one output session. Hitting both still counts as a 'week kept'.",
     requiredHabitIds:["pimsleur-daily","wed-output"] },
+  // Plan milestones (marked by hand). Key stays "badges" for saved-data compatibility.
   badges:[
-    {id:"first-week",         name:"Primera Semana",        icon:"🗓️", xp:100, auto:true,  detail:"Complete every scheduled habit for one full week."},
-    {id:"pimsleur-streak-30", name:"Treinta Días",          icon:"🔥", xp:200, auto:true,  detail:"30-day Pimsleur streak."},
-    {id:"m2-self-intro",      name:"Me Presento",           icon:"🙋", xp:150, month:2,    detail:"Deliver a smooth 2-minute self-introduction in Spanish."},
-    {id:"m4-first-convo",     name:"Primera Conversación",  icon:"💬", xp:250, month:4,    detail:"Hold a 15-minute Langua conversation with no English."},
-    {id:"m6-clinic-ready",    name:"Listo para la Clínica", icon:"🩺", xp:400, month:6,    detail:"Run a routine pediatric visit in Spanish and be understood."},
-    {id:"m9-conversational",  name:"Conversacional",        icon:"🗣️", xp:600, month:9,    detail:"Hold your own with a worried parent, improvising and recovering from missing words."},
+    {id:"m2-self-intro",      name:"Me Presento",           icon:"🙋", month:2, detail:"Deliver a smooth 2-minute self-introduction in Spanish."},
+    {id:"m4-first-convo",     name:"Primera Conversación",  icon:"💬", month:4, detail:"Hold a 15-minute Langua conversation with no English."},
+    {id:"m6-clinic-ready",    name:"Listo para la Clínica", icon:"🩺", month:6, detail:"Run a routine pediatric visit in Spanish and be understood."},
+    {id:"m9-conversational",  name:"Conversacional",        icon:"🗣️", month:9, detail:"Hold your own with a worried parent, improvising and recovering from missing words."},
   ],
 };
 
@@ -646,14 +614,6 @@ function spanishWeeksKept(habits){
   return {kept,full};
 }
 
-// Which auto badges are earned right now
-function spanishAutoBadges(habits){
-  const earned=[];
-  if(spanishWeeksKept(habits).full>0) earned.push("first-week");
-  const pim=(habits||[]).find(h=>h.id==="pimsleur-daily");
-  if(pim && habitBestStreak(pim)>=30) earned.push("pimsleur-streak-30");
-  return earned;
-}
 function milestoneTargetDate(months){
   const d=new Date(SPANISH_TRACK.startDate+"T12:00:00"); d.setMonth(d.getMonth()+months); return localDateStr(d);
 }
@@ -951,111 +911,6 @@ function Toast({message,accent,onDismiss,xp}){
 }
 
 // ─── REMINDER ALERT ───────────────────────────────────────────────────────────
-function LevelUpModal({level,accent,theme,onClose}){
-  const [line]=useState(()=>quip("levelUp",{level}));
-  useEffect(()=>{const t=setTimeout(onClose,6000);return()=>clearTimeout(t);},[onClose]);
-  return(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:4000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-      <div style={{background:theme.panel,border:`2px solid ${accent}`,borderRadius:16,padding:"28px 24px",maxWidth:340,width:"100%",textAlign:"center",boxShadow:`0 0 40px ${accent}44`}}>
-        <div style={{fontSize:"3.5rem",marginBottom:8}}>⚡</div>
-        <div style={{fontSize:"1.4rem",fontWeight:800,color:accent,marginBottom:6}}>LEVEL {level}</div>
-        <div style={{fontSize:"0.88rem",color:theme.text,marginBottom:4,lineHeight:1.5}}>{line}</div>
-        <div style={{fontSize:"0.72rem",color:theme.muted,marginTop:10}}>tap anywhere to dismiss</div>
-        <button onClick={onClose} style={{marginTop:14,background:accent,border:"none",borderRadius:8,padding:"8px 20px",color:"#000",fontWeight:700,cursor:"pointer",fontSize:"0.85rem"}}>{QUIPS.levelUpButton}</button>
-      </div>
-    </div>
-  );
-}
-
-function BadgeToast({badge,accent,onDismiss}){
-  useEffect(()=>{const t=setTimeout(onDismiss,5000);return()=>clearTimeout(t);},[onDismiss]);
-  return(
-    <div style={{position:"fixed",bottom:80,left:"50%",transform:"translateX(-50%)",background:"#1a1000",border:"1.5px solid #facc15",borderRadius:10,padding:"10px 16px",color:"#e2e8f0",fontSize:"0.83rem",zIndex:2100,boxShadow:"0 4px 24px #facc1544",display:"flex",alignItems:"center",gap:10,maxWidth:"92vw"}}>
-      <span style={{fontSize:"1.3rem"}}>{badge.icon}</span>
-      <div>
-        <div style={{fontWeight:700,color:"#facc15",fontSize:"0.78rem"}}>BADGE UNLOCKED: {badge.name}</div>
-        <div style={{fontSize:"0.72rem",color:"#94a3b8"}}>{badge.desc}</div>
-      </div>
-      <button onClick={onDismiss} style={{background:"none",border:"none",color:"#64748b",cursor:"pointer",marginLeft:4,flexShrink:0}}>✕</button>
-    </div>
-  );
-}
-
-function RewardsPanel({rewards,theme}){
-  const [show,setShow]=useState(false);
-  if(!rewards)return null;
-  const level=calcLevel(rewards.xp);
-  const prog=xpProgress(rewards.xp);
-  const toNext=xpForNext(rewards.xp);
-  const earned=BADGE_DEFS.filter(b=>(rewards.badges||[]).includes(b.id));
-  const locked=BADGE_DEFS.filter(b=>!(rewards.badges||[]).includes(b.id));
-  return(
-    <div style={{background:theme.panel,border:`1px solid ${theme.border}`,borderRadius:10,padding:14}}>
-      <SectionHeader title="Rewards" accent={theme.accent} action={
-        <button onClick={()=>setShow(s=>!s)} style={{background:"none",border:`1px solid ${theme.border}`,borderRadius:6,color:theme.muted,cursor:"pointer",fontSize:"0.72rem",padding:"3px 8px"}}>{show?"Collapse":"Expand"}</button>
-      }/>
-      {/* XP Bar */}
-      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:show?12:0}}>
-        <div style={{width:36,height:36,borderRadius:"50%",background:`${theme.accent}22`,border:`2px solid ${theme.accent}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-          <span style={{fontSize:"0.75rem",fontWeight:800,color:theme.accent}}>{level}</span>
-        </div>
-        <div style={{flex:1}}>
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-            <span style={{fontSize:"0.72rem",fontWeight:700,color:theme.text}}>Level {level}</span>
-            <span style={{fontSize:"0.68rem",color:theme.muted}}>{toNext} XP to next</span>
-          </div>
-          <div style={{height:6,background:theme.bg,borderRadius:4}}>
-            <div style={{height:"100%",background:`linear-gradient(90deg,${theme.accent},#a78bfa)`,borderRadius:4,width:`${prog*100}%`,transition:"width 0.5s"}}/>
-          </div>
-        </div>
-        <div style={{textAlign:"right",flexShrink:0}}>
-          <div style={{fontSize:"0.65rem",color:theme.muted}}>Streak</div>
-          <div style={{fontSize:"0.9rem",fontWeight:700,color:"#f97316"}}>🔥{rewards.currentStreak||0}</div>
-        </div>
-      </div>
-      {show&&(
-        <>
-          <div style={{display:"flex",gap:16,marginBottom:12,padding:"10px",background:theme.bg,borderRadius:8}}>
-            {[["Total XP",rewards.xp||0,"⚡"],["Best Streak",(rewards.maxStreak||0)+"d","📅"],["Badges",(rewards.badges||[]).length+"/"+BADGE_DEFS.length,"🏅"]].map(([l,v,i])=>(
-              <div key={l} style={{flex:1,textAlign:"center"}}>
-                <div style={{fontSize:"1rem"}}>{i}</div>
-                <div style={{fontSize:"0.85rem",fontWeight:700,color:theme.text}}>{v}</div>
-                <div style={{fontSize:"0.63rem",color:theme.muted}}>{l}</div>
-              </div>
-            ))}
-          </div>
-          {earned.length>0&&(
-            <div style={{marginBottom:10}}>
-              <div style={{fontSize:"0.68rem",color:theme.muted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Earned</div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                {earned.map(b=>(
-                  <div key={b.id} title={b.desc} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 9px",background:`${theme.accent}11`,border:`1px solid ${theme.accent}33`,borderRadius:7}}>
-                    <span style={{fontSize:"0.9rem"}}>{b.icon}</span>
-                    <span style={{fontSize:"0.72rem",fontWeight:600,color:theme.text}}>{b.name}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {locked.length>0&&(
-            <div>
-              <div style={{fontSize:"0.68rem",color:theme.muted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Locked</div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                {locked.map(b=>(
-                  <div key={b.id} title={b.desc} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 8px",background:theme.bg,border:`1px solid ${theme.border}`,borderRadius:6,opacity:0.5}}>
-                    <span style={{fontSize:"0.85rem",filter:"grayscale(1)"}}>{b.icon}</span>
-                    <span style={{fontSize:"0.68rem",color:theme.muted}}>{b.name}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
 function ReminderAlert({reminders,accent,onDismiss}){
   // Fire ntfy notification for new reminders
   useEffect(()=>{
@@ -1822,7 +1677,7 @@ function HabitsPanel({habits,theme,startDate,onAdd,onToggleDay,onDelete,onSetGoa
                   {h.track==="spanish-clinical"&&<span style={{marginRight:5}}>🇪🇸</span>}{h.title}
                 </div>
                 {(h.durationMin||h.reminderTime)&&<div style={{fontSize:"0.62rem",color:theme.muted,opacity:done?0.5:1}}>
-                  {[h.durationMin&&fmtMins(h.durationMin), h.reminderTime&&("⏰ "+formatTime(h.reminderTime)), h.xp&&("+"+h.xp+" XP")].filter(Boolean).join(" · ")}
+                  {[h.durationMin&&fmtMins(h.durationMin), h.reminderTime&&("⏰ "+formatTime(h.reminderTime))].filter(Boolean).join(" · ")}
                 </div>}
                 {openDetail===h.id&&<div style={{fontSize:"0.7rem",color:theme.muted,marginTop:4,lineHeight:1.4}}>{h.detail}</div>}
               </div>
@@ -2175,8 +2030,6 @@ function buildSystemPrompt(data, weatherRef){
   const activeProjects = (data.projects||[]).filter(p=>p.status==="active");
   const todayHabits = (data.habits||[]).filter(h=>isHabitScheduled(h,todayS));
   const habitsDoneToday = todayHabits.filter(h=>h.completions?.[todayS]);
-  const rewards = data.rewards||{};
-  const level = calcLevel(rewards.xp||0);
 
   const fmtEvent = e => e.title+(e.time?" at "+formatTime(e.time):"")+(e.notes?" ("+e.notes+")":"");
   const fmtTodo = t => t.title+" ["+t.priority+(t.dueDate?" due "+formatDate(t.dueDate):"")+"]";
@@ -2213,7 +2066,6 @@ function buildSystemPrompt(data, weatherRef){
     "TODOS ("+activeTodos.length+" active): "+(activeTodos.length?activeTodos.map(fmtTodo).join(" | "):"All clear"),
     "PROJECTS: "+(activeProjects.length?activeProjects.map(fmtProject).join(" | "):"None"),
     "HABITS today ("+habitsDoneToday.length+"/"+todayHabits.length+"): "+(todayHabits.length?todayHabits.map(fmtHabit).join(" | "):"None"),
-    "REWARDS: Level "+level+", "+( rewards.xp||0)+" XP, streak: "+(rewards.currentStreak||0)+" days",
     (()=>{ const du=data.dailyUnlock||DEFAULT_DATA.dailyUnlock; const st=calcDailyUnlock(data.habits,data.todos);
       return "DAILY UNLOCK ("+du.title+"): "+(du.claims?.[todayStr()]?"claimed today":st.unlocked?"unlocked, not yet claimed":"locked, "+st.done+"/"+st.total+" done; still needed: "+st.items.filter(i=>!i.done).map(i=>i.title).join(", "))+"; claim streak "+calcClaimStreak(du.claims)+" days"; })(),
     (()=>{ const th=trackHabits(data.habits); if(!th.length) return "";
@@ -2223,7 +2075,7 @@ function buildSystemPrompt(data, weatherRef){
       return "SPANISH PLAN (Clinical Spanish for pediatric visits, Pimsleur + Langua, started "+formatDate(SPANISH_TRACK.startDate)+"): today: "+(todayList.join(" | ")||"rest day")
         +"; this week "+wk.done+"/"+wk.total+(wk.fullKept?" (full week kept)":wk.minimumKept?" (minimum kept)":"")
         +"; minimum rule: Pimsleur every scheduled day + Wednesday output session; Pimsleur streak "+(pim?habitStreak(pim):0)
-        +"; badges earned: "+(got.join(", ")||"none")
+        +"; milestones reached: "+(got.join(", ")||"none yet")
         +". Weekly rhythm: Pimsleur Mon-Sat 7:30am; Mon input, Tue drill, Wed output, Thu drill, Fri consolidate at 7pm; Sat immersion 10am; café en español Tue/Thu noon."; })(),
     weatherRef?"WEATHER: "+weatherRef:"",
     "",
@@ -2457,6 +2309,7 @@ function SpanishPanel({habits, spanishTrack, theme, onClaimMilestone}){
   const cafe=th.find(h=>h.id==="cafe-espanol");
   const {kept}=spanishWeeksKept(habits);
   const earned=spanishTrack?.badges||{};
+  const milestones=SPANISH_TRACK.badges.filter(b=>b.month);
   const todayItems=th.filter(h=>isHabitScheduled(h,today));
   const red="#ef4444", green="#22c55e", amber="#f59e0b";
   const btn={background:"none",border:`1px solid ${theme.border}`,borderRadius:6,color:theme.muted,cursor:"pointer",fontSize:"0.72rem",padding:"3px 8px"};
@@ -2524,29 +2377,28 @@ function SpanishPanel({habits, spanishTrack, theme, onClaimMilestone}){
 
         {/* Badges */}
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-          <div style={{fontSize:"0.62rem",color:theme.muted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Badges · {Object.keys(earned).length}/{SPANISH_TRACK.badges.length}</div>
+          <div style={{fontSize:"0.62rem",color:theme.muted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Milestones · {milestones.filter(b=>earned[b.id]).length}/{milestones.length}</div>
           <button onClick={()=>setOpenBadges(o=>!o)} style={btn}>{openBadges?"Hide":"Show"}</button>
         </div>
         {openBadges && (
           <div style={{display:"flex",flexDirection:"column",gap:5}}>
-            {SPANISH_TRACK.badges.map(b=>{
+            {milestones.map(b=>{
               const got=earned[b.id];
               return(
                 <div key={b.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 8px",background:theme.bg,borderRadius:7,opacity:got?1:0.85}}>
                   <span style={{fontSize:"1.2rem",filter:got?"none":"grayscale(1)",opacity:got?1:0.5}}>{b.icon}</span>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:"0.8rem",fontWeight:700,color:got?amber:theme.text}}>{b.name} <span style={{fontSize:"0.62rem",color:theme.muted,fontWeight:400}}>+{b.xp} XP</span></div>
+                    <div style={{fontSize:"0.8rem",fontWeight:700,color:got?amber:theme.text}}>{b.name}</div>
                     <div style={{fontSize:"0.66rem",color:theme.muted,lineHeight:1.35}}>
                       {b.month?`Month ${b.month} (~${formatDate(milestoneTargetDate(b.month))}): `:""}{b.detail}
                     </div>
-                    {got&&<div style={{fontSize:"0.6rem",color:green,marginTop:2}}>Earned {formatDate(got)}</div>}
+                    {got&&<div style={{fontSize:"0.6rem",color:green,marginTop:2}}>Reached {formatDate(got)}</div>}
                   </div>
                   {!got && b.month && (
                     confirming===b.id
                       ? <button onClick={()=>{onClaimMilestone(b);setConfirming(null);}} style={{...btn,background:amber,color:"#000",border:"none",fontWeight:700}}>Confirm</button>
                       : <button onClick={()=>setConfirming(b.id)} style={btn}>I did it</button>
                   )}
-                  {!got && b.auto && <span style={{fontSize:"0.6rem",color:theme.muted,flexShrink:0}}>auto</span>}
                 </div>
               );
             })}
@@ -3186,9 +3038,6 @@ function App(){
   const [input,setInput]=useState("");
   const [toast,setToast]=useState(null);
   const [loading,setLoading]=useState(true);
-  const [levelUpModal,setLevelUpModal]=useState(null);
-  const [newBadge,setNewBadge]=useState(null);
-  const [toastXp,setToastXp]=useState(null);
   const [showMonthlyPrompt,setShowMonthlyPrompt]=useState(false);
   const [goalCelebration,setGoalCelebration]=useState(null); // {type,restaurant}
 
@@ -3284,34 +3133,6 @@ function App(){
   };
   const showToast=msg=>setToast(msg);
 
-  const earnXP=useCallback((amount, newStats={})=>{
-    setData(prev=>{
-      if(!prev)return prev;
-      const r=prev.rewards||{xp:0,badges:[],currentStreak:0,maxStreak:0,lastActiveDate:null,totalTodos:0,totalHabits:0,totalSteps:0,totalNotes:0,nightOwl:false,earlyBird:false};
-      const oldLevel=calcLevel(r.xp);
-      const newXp=(r.xp||0)+amount;
-      const newSpendable=(r.spendableXp||0)+amount;
-      const newLevel=calcLevel(newXp);
-      // streak
-      const todayS=todayStr();
-      const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
-      const yStr=localDateStr(yesterday);
-      const streak=r.lastActiveDate===todayS?r.currentStreak:r.lastActiveDate===yStr?(r.currentStreak||0)+1:1;
-      const maxStreak=Math.max(r.maxStreak||0,streak);
-      // time badges
-      const h=new Date().getHours();
-      const mergedStats={...r,...newStats,xp:newXp,spendableXp:newSpendable,currentStreak:streak,maxStreak,lastActiveDate:todayS,nightOwl:r.nightOwl||(h>=22),earlyBird:r.earlyBird||(h<7)};
-      const newBadges=checkNewBadges(mergedStats,r.badges||[]);
-      const updatedRewards={...mergedStats,badges:[...(r.badges||[]),...newBadges]};
-      const updated={...prev,rewards:updatedRewards};
-      pwaStorage.set(STORAGE_KEY,JSON.stringify(updated)).catch(()=>{});
-      if(newLevel>oldLevel) setTimeout(()=>setLevelUpModal(newLevel),300);
-      if(newBadges.length>0) setTimeout(()=>setNewBadge(BADGE_DEFS.find(b=>b.id===newBadges[0])),600);
-      setToastXp(amount);
-      return updated;
-    });
-  },[]);
-
   // Handle actions from the AI assistant
   const handleAssistantAction = useCallback((action) => {
     if(!action||!action.type) return;
@@ -3373,24 +3194,16 @@ function App(){
   },[data?.events, data?.todos, data?.habits]);
 
   // Spanish badges: record once, award XP, celebrate
-  const dataRef=useRef(null); dataRef.current=data;
-  const awardedRef=useRef(new Set());
-  const awardSpanishBadge=useCallback(b=>{
-    if(!b || awardedRef.current.has(b.id) || dataRef.current?.spanishTrack?.badges?.[b.id]) return;
-    awardedRef.current.add(b.id);
+  // Spanish plan milestones: mark reached once
+  const claimMilestone=useCallback(b=>{
+    if(!b) return;
     update(d=>{
       const st=d.spanishTrack||{};
       if(st.badges?.[b.id]) return d;
       return {...d, spanishTrack:{...st, badges:{...(st.badges||{}), [b.id]:todayStr()}}};
     });
-    earnXP(b.xp);
-    setNewBadge({icon:b.icon,name:b.name,desc:b.detail+" · +"+b.xp+" XP"});
-  },[update,earnXP]);
-  useEffect(()=>{
-    if(!data?.spanishTrack?.installed) return;
-    const have=data.spanishTrack.badges||{};
-    spanishAutoBadges(data.habits).filter(id=>!have[id]).forEach(id=>awardSpanishBadge(SPANISH_TRACK.badges.find(b=>b.id===id)));
-  },[data?.habits]);
+    setToast(b.icon+" "+b.name+" — milestone reached. ¡Eso!");
+  },[update]);
 
   if(loading||!data)return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0a0e1a",color:"#38bdf8",fontFamily:"system-ui"}}>Loading…</div>;
 
@@ -3401,7 +3214,6 @@ function App(){
   return(
     <div style={{minHeight:"100vh",background:theme.bg,color:theme.text,fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",padding:"12px 16px",maxWidth:680,margin:"0 auto",boxSizing:"border-box"}}>
       <ReminderAlert reminders={activeAlerts} accent={theme.accent} onDismiss={dismiss}/>
-      {levelUpModal&&<LevelUpModal level={levelUpModal} accent={theme.accent} theme={theme} onClose={()=>setLevelUpModal(null)}/>}
       {goalCelebration&&<GoalRewardCelebration type={goalCelebration.type} restaurant={goalCelebration.restaurant} theme={theme} accent={theme.accent} onClose={()=>setGoalCelebration(null)}/>}
       {showMonthlyPrompt&&(
         <MonthlyReviewModal habits={safeD.habits} theme={theme} startDate={safeD.settings?.trackingStartDate||"2026-09-01"}
@@ -3414,7 +3226,6 @@ function App(){
           }}
         />
       )}
-      {newBadge&&<BadgeToast badge={newBadge} accent={theme.accent} onDismiss={()=>setNewBadge(null)}/>}
 
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
         <div>
@@ -3450,7 +3261,6 @@ function App(){
           onSave={du=>save({...safeD,dailyUnlock:du})}
           onToast={showToast}
         />
-        <RewardsPanel rewards={safeD.rewards} theme={theme}/>
         {/* Reward Store and weekly/monthly meal rewards retired (Oct 2026) — Daily Unlock is the reward now. Data kept. */}
         <WeatherWidget theme={theme}/>
         <CalendarPanel events={safeD.events} todos={safeD.todos} theme={theme}/>
@@ -3460,7 +3270,6 @@ function App(){
           onDeleteProject={id=>save({...safeD,projects:safeD.projects.filter(p=>p.id!==id)})}
           onMarkStepDone={(projId,stepId)=>{
             save({...safeD,projects:safeD.projects.map(p=>p.id!==projId?p:{...p,lastProgressDate:todayStr(),steps:p.steps.map(s=>s.id===stepId?{...s,done:true}:s)})});
-            earnXP(XP_PER_STEP,{totalSteps:(safeD.rewards?.totalSteps||0)+1});
             showToast(pick(QUIPS.stepComplete));
           }}
           onAddToTodo={t=>{save({...safeD,todos:[...safeD.todos,t]});showToast(`Added to To-Do: "${t.title.slice(0,38)}…"`);}}
@@ -3475,14 +3284,14 @@ function App(){
               const t=safeD.todos.find(t=>t.id===id);
               const completing=t&&!t.completed;
               save({...safeD,todos:safeD.todos.map(t=>t.id===id?{...t,completed:!t.completed}:t)});
-              if(completing){earnXP(XP_PER_TODO,{totalTodos:(safeD.rewards?.totalTodos||0)+1});showToast(pick(QUIPS.todoComplete));}
+              if(completing){showToast(pick(QUIPS.todoComplete));}
             }} onDelete={id=>save({...safeD,todos:safeD.todos.filter(t=>t.id!==id)})}/>
-        <SpanishPanel habits={safeD.habits} spanishTrack={safeD.spanishTrack} theme={theme} onClaimMilestone={awardSpanishBadge}/>
+        <SpanishPanel habits={safeD.habits} spanishTrack={safeD.spanishTrack} theme={theme} onClaimMilestone={claimMilestone}/>
         <HabitsPanel habits={safeD.habits} theme={theme} startDate={safeD.settings?.trackingStartDate||"2026-09-01"} onSetGoals={updated=>save({...safeD,habits:updated})} onAdd={h=>save({...safeD,habits:[...safeD.habits,h]})} onToggleDay={(id,date)=>{
               const h=safeD.habits.find(h=>h.id===id);
               const wasOff=h&&!h.completions?.[date];
               save({...safeD,habits:safeD.habits.map(h=>h.id===id?{...h,completions:{...h.completions,[date]:!h.completions?.[date]}}:h)});
-              if(wasOff){earnXP(h.xp||XP_PER_HABIT,{totalHabits:(safeD.rewards?.totalHabits||0)+1});showToast(pick(QUIPS.habitComplete));}
+              if(wasOff){showToast(pick(QUIPS.habitComplete));}
             }} onDelete={id=>save({...safeD,habits:safeD.habits.filter(h=>h.id!==id)})}/>
       </div>
 
@@ -3490,7 +3299,7 @@ function App(){
         <strong style={{color:theme.accent}}>Commands:</strong> "Add note [text]" · "Add todo [task] [priority] [date]" · "Schedule [event] [time] [day]" · "Add habit [name]" · 🎤 mic
       </div>
 
-      {toast&&<Toast message={toast} accent={theme.accent} onDismiss={()=>{setToast(null);setToastXp(null);}} xp={toastXp}/>}
+      {toast&&<Toast message={toast} accent={theme.accent} onDismiss={()=>setToast(null)}/>}
       <AssistantChat data={safeD} theme={theme} onAction={handleAssistantAction}/>
     </div>
   );
