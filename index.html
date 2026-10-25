@@ -975,29 +975,53 @@ function useReminderEngine(events,todos,projects){
   return{activeAlerts,dismiss};
 }
 
+// ─── WEATHER LOCATION ─────────────────────────────────────────────────────────
+// Weather uses a saved location so the app never has to ask for GPS on open.
+// Default is home (University Place, WA); the 📍 button updates it on demand.
+const WX_LOC_KEY = "jarvis_weather_location";
+const DEFAULT_WX_LOC = { lat:47.2357, lon:-122.5504, label:"University Place" };
+function getWeatherLocation(){
+  try{ const v=JSON.parse(localStorage.getItem(WX_LOC_KEY)||"null"); if(v&&typeof v.lat==="number") return v; }catch{}
+  return DEFAULT_WX_LOC;
+}
+function saveWeatherLocation(loc){ try{ localStorage.setItem(WX_LOC_KEY, JSON.stringify(loc)); }catch{} }
+
 // ─── WEATHER WIDGET ───────────────────────────────────────────────────────────
 function WeatherWidget({theme}){
+  const [loc,setLoc]=useState(getWeatherLocation);
+  const [locating,setLocating]=useState(false);
   const [wx,setWx]=useState(null);
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState(null);
   const [lastFetch,setLastFetch]=useState(null);
 
-  const fetchWeather=useCallback(()=>{
-    if(!navigator.geolocation){setError("Geolocation not supported");return;}
+  const fetchWeather=useCallback(async(where)=>{
+    const place=where||getWeatherLocation();
     setLoading(true);setError(null);
-    navigator.geolocation.getCurrentPosition(async pos=>{
+    {
       try{
-        const {latitude:lat,longitude:lon}=pos.coords;
+        const {lat,lon}=place;
         const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=auto&forecast_days=5`;
         const res=await fetch(url);
         const d=await res.json();
         setWx(d);setLastFetch(Date.now());
       }catch{setError("Failed to load weather");}
       finally{setLoading(false);}
-    },()=>{setError("Location permission denied");setLoading(false);});
+    }
   },[]);
 
   useEffect(()=>{fetchWeather();},[]);
+
+  // Only asks for location permission when you tap 📍
+  const useMyLocation=()=>{
+    if(!navigator.geolocation){setError("Location not supported on this device");return;}
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(pos=>{
+      const next={lat:+pos.coords.latitude.toFixed(3),lon:+pos.coords.longitude.toFixed(3),label:"Current location"};
+      saveWeatherLocation(next);setLoc(next);setLocating(false);fetchWeather(next);
+    },()=>{setLocating(false);setError("Location permission denied — still using "+getWeatherLocation().label);},{timeout:10000});
+  };
+  const resetHome=()=>{ saveWeatherLocation(DEFAULT_WX_LOC); setLoc(DEFAULT_WX_LOC); fetchWeather(DEFAULT_WX_LOC); };
 
   const wmoIcon=(code)=>{
     if(code===0)return"☀️";
@@ -1020,13 +1044,13 @@ function WeatherWidget({theme}){
 
   if(loading)return(
     <div style={{background:theme.panel,border:`1px solid ${theme.border}`,borderRadius:10,padding:14,display:"flex",alignItems:"center",gap:10,color:theme.muted,fontSize:"0.82rem"}}>
-      <span style={{fontSize:"1.2rem"}}>🌡️</span> Detecting location…
+      <span style={{fontSize:"1.2rem"}}>🌡️</span> {locating?"Finding you…":"Checking the sky…"}
     </div>
   );
   if(error)return(
     <div style={{background:theme.panel,border:`1px solid ${theme.border}`,borderRadius:10,padding:14,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
       <span style={{color:theme.muted,fontSize:"0.8rem"}}>⚠️ {error}</span>
-      <button onClick={fetchWeather} style={{background:theme.accent,border:"none",borderRadius:6,padding:"4px 10px",color:"#000",fontSize:"0.72rem",fontWeight:700,cursor:"pointer"}}>Retry</button>
+      <button onClick={()=>fetchWeather()} style={{background:theme.accent,border:"none",borderRadius:6,padding:"4px 10px",color:"#000",fontSize:"0.72rem",fontWeight:700,cursor:"pointer"}}>Retry</button>
     </div>
   );
   if(!wx)return null;
@@ -1038,8 +1062,14 @@ function WeatherWidget({theme}){
   return(
     <div style={{background:theme.panel,border:`1px solid ${theme.border}`,borderRadius:10,padding:14}}>
       <SectionHeader title="Weather" accent={theme.accent} action={
-        <button onClick={fetchWeather} style={{background:"none",border:`1px solid ${theme.border}`,borderRadius:6,color:theme.muted,cursor:"pointer",fontSize:"0.72rem",padding:"3px 8px"}}>↻ Refresh</button>
+        <div style={{display:"flex",gap:6}}>
+          <button onClick={useMyLocation} title="Use my current location" style={{background:"none",border:`1px solid ${theme.border}`,borderRadius:6,color:theme.muted,cursor:"pointer",fontSize:"0.72rem",padding:"3px 8px"}}>📍</button>
+          <button onClick={()=>fetchWeather()} style={{background:"none",border:`1px solid ${theme.border}`,borderRadius:6,color:theme.muted,cursor:"pointer",fontSize:"0.72rem",padding:"3px 8px"}}>↻ Refresh</button>
+        </div>
       }/>
+      <div style={{fontSize:"0.68rem",color:theme.muted,marginTop:-6,marginBottom:8}}>
+        {loc.label}{loc.label!==DEFAULT_WX_LOC.label&&<> · <span onClick={resetHome} style={{textDecoration:"underline",cursor:"pointer"}}>back to home</span></>}
+      </div>
       {/* Current conditions */}
       <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:12}}>
         <div style={{fontSize:"3rem",lineHeight:1}}>{wmoIcon(cur.weather_code)}</div>
@@ -2641,19 +2671,20 @@ function AssistantChat({data, theme, onAction}){
 
     // Grab weather quietly in background for context
     let wxContext = weatherCache;
-    if(!wxContext && navigator.geolocation){
+    if(!wxContext){
       try{
-        await new Promise((res)=>navigator.geolocation.getCurrentPosition(async pos=>{
+        const wl=getWeatherLocation();
+        await new Promise(async(res)=>{
           try{
-            const r=await fetch("https://api.open-meteo.com/v1/forecast?latitude="+pos.coords.latitude+"&longitude="+pos.coords.longitude+"&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto");
+            const r=await fetch("https://api.open-meteo.com/v1/forecast?latitude="+wl.lat+"&longitude="+wl.lon+"&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto");
             const d=await r.json();
             const c=d.current;
             wxContext=Math.round(c.temperature_2m)+"F, feels like "+Math.round(c.apparent_temperature)+"F, wind "+Math.round(c.wind_speed_10m)+"mph";
             setWeatherCache(wxContext);
           }catch(ex){console.log("wx skip",ex);}
           res();
-        },()=>res(),{timeout:3000}));
-      }catch(ex){console.log("geo skip",ex);}
+        });
+      }catch(ex){console.log("wx skip",ex);}
     }
 
     try{
