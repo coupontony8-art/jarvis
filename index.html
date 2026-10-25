@@ -757,7 +757,6 @@ const DEFAULT_DATA = {
     {id:genId(),title:"Meditation",       frequency:"daily", daysOfWeek:[0,1,2,3,4,5,6],completions:{},monthlyGoals:{}},
     {id:genId(),title:"Reading",          frequency:"daily", daysOfWeek:[0,1,2,3,4,5,6],completions:{},monthlyGoals:{}},
     {id:genId(),title:"Journaling",       frequency:"daily", daysOfWeek:[0,1,2,3,4,5,6],completions:{},monthlyGoals:{}},
-    {id:genId(),title:"Anki review",       frequency:"weekly",daysOfWeek:[1,2,3,4,5],   completions:{},monthlyGoals:{}},
   ],
   projects:[
     { id:genId(), title:"Spanish Practice", color:"#f59e0b", type:"flexible", status:"active",
@@ -3196,8 +3195,10 @@ function App(){
           const savedTitles=new Set((saved.habits||[]).map(h=>h.title));
           const newHabits=DEFAULT_DATA.habits.filter(h=>!savedTitles.has(h.title));
           // Patch habits: rename Evening->Morning workout, remove Heat/sauna
+          const removeAnki=!saved.settings?.ankiRemoved; // one-time removal; a new Anki habit later is left alone
           const patchedHabits=(saved.habits||[])
             .filter(h=>h.title!=="Heat/sauna")
+            .filter(h=>!(removeAnki&&h.title==="Anki review"))
             .map(h=>{
               if(h.title==="Morning workout"||h.title==="Evening workout"){
                 return{...h,title:"Morning workout",frequency:"daily",daysOfWeek:[0,1,2,3,4,5,6],weeklyTarget:h.weeklyTarget||3,monthlyGoals:h.monthlyGoals||{}};
@@ -3223,13 +3224,13 @@ function App(){
               p.title==="Learn Spanish"?{...p,title:"Spanish Practice"}:p
             ),
             rewards:{...(saved.rewards||DEFAULT_DATA.rewards), spendableXp:(saved.rewards?.spendableXp||saved.rewards?.xp||0)},
-            settings:{...(saved.settings||DEFAULT_DATA.settings), trackingStartDate:saved.settings?.trackingStartDate||"2026-09-01"},
+            settings:{...(saved.settings||DEFAULT_DATA.settings), trackingStartDate:saved.settings?.trackingStartDate||"2026-09-01", ankiRemoved:true},
             rewardStore:saved.rewardStore||DEFAULT_DATA.rewardStore,
             goalRewards:saved.goalRewards||DEFAULT_DATA.goalRewards,
             dailyUnlock:saved.dailyUnlock||DEFAULT_DATA.dailyUnlock,
             habits:migratedHabits,
           });
-          if(!hasPilots||newHabits.length>0||!saved.spanishTrack?.installed){
+          if(!hasPilots||newHabits.length>0||!saved.spanishTrack?.installed||removeAnki){
             await pwaStorage.set(STORAGE_KEY,JSON.stringify(finalData));
           }
           setData(finalData);
