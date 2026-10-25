@@ -79,7 +79,16 @@ async function sendNotification(title, message, priority="default", tags=["bell"
 }
 
 // ─── SERVER SYNC (for contextual push notifications) ─────────────────────────
-async function syncEventsToServer(events, todos) {
+// Compact habit list for server-side reminders (only what check-reminders needs)
+function habitsForServer(habits){
+  const cutoff=localDateStr(new Date(Date.now()-3*86400000));
+  return (habits||[]).filter(h=>h.reminderTime).map(h=>({
+    id:h.id, title:h.title, detail:h.detail||"", durationMin:h.durationMin||null, reminderTime:h.reminderTime,
+    frequency:h.frequency, daysOfWeek:h.daysOfWeek||[], startDate:h.startDate||null,
+    doneDates:Object.keys(h.completions||{}).filter(d=>h.completions[d]&&d>=cutoff),
+  }));
+}
+async function syncEventsToServer(events, todos, habits) {
   try {
     const today = localDateStr(new Date());
     const cutoff = new Date();
@@ -89,7 +98,7 @@ async function syncEventsToServer(events, todos) {
     const upcoming = (events||[]).filter(e => e.date && e.date >= today && e.date <= cutoffStr);
     // Include all active todos
     const activeTodos = (todos||[]).filter(t => !t.completed);
-    const payload = { events: upcoming, todos: activeTodos };
+    const payload = { events: upcoming, todos: activeTodos, habits: habitsForServer(habits) };
     console.log("Syncing to server:", upcoming.length, "events,", activeTodos.length, "todos");
     const res = await fetch("/.netlify/functions/sync-events", {
       method: "POST",
@@ -363,8 +372,7 @@ function calcHabitMonthRate(habit, mk, startDate){
     const ds=`${y}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
     if(ds>today) continue;   // future
     if(ds<cutoff) continue;  // before tracking start
-    const dow=new Date(ds+"T12:00:00").getDay();
-    const isScheduled=habit.frequency==="daily"||(habit.daysOfWeek||[]).includes(dow);
+    const isScheduled=isHabitScheduled(habit,ds);
     if(isScheduled){ scheduled++; if(habit.completions?.[ds]) completed++; }
   }
   return scheduled===0?null:Math.round((completed/scheduled)*100);
@@ -450,8 +458,7 @@ function calcDailyUnlock(habits, todos, dateStr){
   const weekStart = new Date(getWeekKey(date)+"T12:00:00");
   const items = [];
   (habits||[]).forEach(h=>{
-    const scheduled = h.frequency==="daily" ? (h.daysOfWeek||[0,1,2,3,4,5,6]).includes(dow) : (h.daysOfWeek||[]).includes(dow);
-    if(!scheduled) return;
+    if(!isHabitScheduled(h, ds)) return;
     const doneToday = !!h.completions?.[ds];
     if(h.weeklyTarget){
       let doneBefore = 0;
@@ -518,6 +525,138 @@ function daysInMonth(y,m){ return new Date(y,m+1,0).getDate(); }
 function firstDayOfMonth(y,m){ return new Date(y,m,1).getDay(); }
 function fmtMins(m){ if(m<60)return`${m}m`; return m%60===0?`${m/60}h`:`${Math.floor(m/60)}h ${m%60}m`; }
 function timeAgo(ts){ const d=Date.now()-ts; if(d<60000)return"just now"; if(d<3600000)return`${Math.floor(d/60000)}m ago`; if(d<86400000)return`${Math.floor(d/3600000)}h ago`; return`${Math.floor(d/86400000)}d ago`; }
+
+// ─── CLINICAL SPANISH TRACK ───────────────────────────────────────────────────
+// From spanish-reminders-for-jarvis.json (Spanish project master plan).
+// daysOfWeek uses JS numbering: Sun=0 … Sat=6.
+const SPANISH_TRACK = {
+  id:"spanish-clinical", name:"Clinical Spanish",
+  goal:"Conversational Spanish for pediatric patient visits",
+  tools:["Pimsleur","Langua"], startDate:"2026-10-27",
+  habits:[
+    {id:"pimsleur-daily", title:"Pimsleur lesson", daysOfWeek:[1,2,3,4,5,6], durationMin:30, xp:15, streakTracked:true,  reminderTime:"07:30",
+      detail:"One 30-min lesson, hands-free on the commute. Your core automaticity driver."},
+    {id:"mon-input",      title:"Input session", daysOfWeek:[1], durationMin:45, xp:30, streakTracked:false, reminderTime:"19:00",
+      detail:"A Langua conversation on the week's topic, or listening to slightly-hard material. Jot useful new words to recycle."},
+    {id:"tue-micro",      title:"Micro-drill: buy-time chunks", daysOfWeek:[2], durationMin:15, xp:10, streakTracked:false, reminderTime:"19:00",
+      detail:"Drill the 'buy-time' phrases out loud + yesterday's new words. 15 min."},
+    {id:"wed-output",     title:"Output session", daysOfWeek:[3], durationMin:45, xp:35, streakTracked:false, reminderTime:"19:00",
+      detail:"Langua clinical roleplay (sick visit / vaccine talk / worried parent) OR café en español with a coworker."},
+    {id:"thu-micro",      title:"Micro-drill: phrase bank", daysOfWeek:[4], durationMin:15, xp:10, streakTracked:false, reminderTime:"19:00",
+      detail:"One phrase-bank section aloud — cover the Spanish, produce it from memory. 15 min."},
+    {id:"fri-consolidate",title:"Consolidate session", daysOfWeek:[5], durationMin:45, xp:30, streakTracked:false, reminderTime:"19:00",
+      detail:"Review the week's Pimsleur lessons + write this phase's grammar as sentences about your real workday."},
+    {id:"sat-immersion",  title:"Immersion (fun)", daysOfWeek:[6], durationMin:25, xp:15, streakTracked:false, reminderTime:"10:00",
+      detail:"A show or podcast in Spanish, low pressure. Just enjoy it."},
+    {id:"cafe-espanol",   title:"Café en español", daysOfWeek:[2,4], durationMin:10, xp:20, streakTracked:true,  reminderTime:"12:00",
+      detail:"10 min of Spanish with a native-speaker coworker at lunch. Their only job: reformulate, don't correct."},
+  ],
+  fallbackRule:{ name:"Week-fell-apart minimum",
+    detail:"If the week collapses, the only non-negotiables are Pimsleur audio + one output session. Hitting both still counts as a 'week kept'.",
+    requiredHabitIds:["pimsleur-daily","wed-output"] },
+  badges:[
+    {id:"first-week",         name:"Primera Semana",        icon:"🗓️", xp:100, auto:true,  detail:"Complete every scheduled habit for one full week."},
+    {id:"pimsleur-streak-30", name:"Treinta Días",          icon:"🔥", xp:200, auto:true,  detail:"30-day Pimsleur streak."},
+    {id:"m2-self-intro",      name:"Me Presento",           icon:"🙋", xp:150, month:2,    detail:"Deliver a smooth 2-minute self-introduction in Spanish."},
+    {id:"m4-first-convo",     name:"Primera Conversación",  icon:"💬", xp:250, month:4,    detail:"Hold a 15-minute Langua conversation with no English."},
+    {id:"m6-clinic-ready",    name:"Listo para la Clínica", icon:"🩺", xp:400, month:6,    detail:"Run a routine pediatric visit in Spanish and be understood."},
+    {id:"m9-conversational",  name:"Conversacional",        icon:"🗣️", xp:600, month:9,    detail:"Hold your own with a worried parent, improvising and recovering from missing words."},
+  ],
+};
+
+// One-time install of the Spanish track into the habit list.
+// Converts the old "Pimsleur Spanish" habit instead of duplicating it.
+function installSpanishTrack(data){
+  if(data.spanishTrack?.installed) return data;
+  let habits=[...(data.habits||[])];
+  SPANISH_TRACK.habits.forEach(ph=>{
+    const fields={...ph, frequency:"weekly", weeklyTarget:null, startDate:SPANISH_TRACK.startDate, track:SPANISH_TRACK.id};
+    let idx=habits.findIndex(h=>h.id===ph.id);
+    if(idx<0 && ph.id==="pimsleur-daily") idx=habits.findIndex(h=>/pimsleur/i.test(h.title||""));
+    if(idx>=0) habits[idx]={...habits[idx], ...fields, completions:habits[idx].completions||{}, monthlyGoals:habits[idx].monthlyGoals||{}};
+    else habits.push({...fields, completions:{}, monthlyGoals:{}});
+  });
+  return {...data, habits, spanishTrack:{installed:true, badges:{}, ...(data.spanishTrack||{}), installedAt:todayStr()}};
+}
+
+// Is this habit on the schedule for a given day? (respects per-habit start date)
+function isHabitScheduled(h, ds){
+  if(h.startDate && ds < h.startDate) return false;
+  if(h.frequency==="daily") return true;
+  const dow=new Date(ds+"T12:00:00").getDay();
+  return (h.daysOfWeek||[]).includes(dow);
+}
+
+// ─── SPANISH TRACK STATS ──────────────────────────────────────────────────────
+function addDaysStr(ds, n){ const d=new Date(ds+"T12:00:00"); d.setDate(d.getDate()+n); return localDateStr(d); }
+function weekDates(weekKey){ return [0,1,2,3,4,5,6].map(i=>addDaysStr(weekKey,i)); } // Mon..Sun
+function trackHabits(habits){ return (habits||[]).filter(h=>h.track===SPANISH_TRACK.id); }
+
+// Consecutive scheduled days completed, walking back from today.
+// Today not done yet doesn't break the streak.
+function habitStreak(h){
+  let streak=0, ds=todayStr(), guard=0;
+  if(isHabitScheduled(h,ds) && !h.completions?.[ds]) ds=addDaysStr(ds,-1);
+  while(guard++<800){
+    if(h.startDate && ds<h.startDate) break;
+    if(isHabitScheduled(h,ds)){ if(h.completions?.[ds]) streak++; else break; }
+    ds=addDaysStr(ds,-1);
+  }
+  return streak;
+}
+function habitBestStreak(h){
+  let best=0, run=0, ds=h.startDate||todayStr();
+  const end=todayStr();
+  for(let g=0; ds<=end && g<800; g++, ds=addDaysStr(ds,1)){
+    if(!isHabitScheduled(h,ds)) continue;
+    if(h.completions?.[ds]){ run++; best=Math.max(best,run); } else if(ds<end) run=0;
+  }
+  return best;
+}
+
+// Status of one Mon–Sun week of the track
+function spanishWeekStatus(habits, weekKey){
+  const th=trackHabits(habits), today=todayStr();
+  const days=weekDates(weekKey).map(ds=>({
+    ds,
+    items:th.filter(h=>isHabitScheduled(h,ds)).map(h=>({id:h.id,title:h.title,done:!!h.completions?.[ds]})),
+  }));
+  const all=days.flatMap(d=>d.items.map(i=>({...i,ds:d.ds})));
+  const total=all.length, done=all.filter(i=>i.done).length;
+  const req=SPANISH_TRACK.fallbackRule.requiredHabitIds;
+  const reqItems=all.filter(i=>req.includes(i.id));
+  const fullKept = total>0 && done===total;
+  const minimumKept = reqItems.length>0 && reqItems.every(i=>i.done);
+  const over = addDaysStr(weekKey,6) < today;
+  // can the minimum still be hit? (no required item missed on a past day)
+  const minimumAlive = reqItems.every(i=>i.done || i.ds>=today);
+  return {days,total,done,fullKept,minimumKept,minimumAlive,over};
+}
+
+function spanishWeeksKept(habits){
+  const start=SPANISH_TRACK.startDate;
+  let wk=getWeekKey(new Date(start+"T12:00:00")), kept=0, full=0, guard=0;
+  const thisWeek=getCurrentWeekKey();
+  while(wk<thisWeek && guard++<200){
+    const st=spanishWeekStatus(habits,wk);
+    if(st.fullKept) full++;
+    if(st.fullKept||st.minimumKept) kept++;
+    wk=addDaysStr(wk,7);
+  }
+  return {kept,full};
+}
+
+// Which auto badges are earned right now
+function spanishAutoBadges(habits){
+  const earned=[];
+  if(spanishWeeksKept(habits).full>0) earned.push("first-week");
+  const pim=(habits||[]).find(h=>h.id==="pimsleur-daily");
+  if(pim && habitBestStreak(pim)>=30) earned.push("pimsleur-streak-30");
+  return earned;
+}
+function milestoneTargetDate(months){
+  const d=new Date(SPANISH_TRACK.startDate+"T12:00:00"); d.setMonth(d.getMonth()+months); return localDateStr(d);
+}
 
 const DEFAULT_DATA = {
   settings:{ name:"Tony", theme:"dark", accent:"#38bdf8", trackingStartDate:"2026-09-01" },
@@ -618,7 +757,6 @@ const DEFAULT_DATA = {
     {id:genId(),title:"Meditation",       frequency:"daily", daysOfWeek:[0,1,2,3,4,5,6],completions:{},monthlyGoals:{}},
     {id:genId(),title:"Reading",          frequency:"daily", daysOfWeek:[0,1,2,3,4,5,6],completions:{},monthlyGoals:{}},
     {id:genId(),title:"Journaling",       frequency:"daily", daysOfWeek:[0,1,2,3,4,5,6],completions:{},monthlyGoals:{}},
-    {id:genId(),title:"Pimsleur Spanish",  frequency:"daily", daysOfWeek:[0,1,2,3,4,5,6],completions:{},monthlyGoals:{},weeklyTarget:5},
     {id:genId(),title:"Anki review",       frequency:"weekly",daysOfWeek:[1,2,3,4,5],   completions:{},monthlyGoals:{}},
   ],
   projects:[
@@ -941,7 +1079,7 @@ function ReminderAlert({reminders,accent,onDismiss}){
 }
 
 // ─── REMINDER ENGINE ──────────────────────────────────────────────────────────
-function useReminderEngine(events,todos,projects){
+function useReminderEngine(events,todos,projects,habits){
   const [activeAlerts,setActiveAlerts]=useState([]);
   const dismissedRef=useRef(new Set());
   useEffect(()=>{
@@ -958,6 +1096,15 @@ function useReminderEngine(events,todos,projects){
         const[ah,am]=t.dueTime?t.dueTime.split(":").map(Number):[9,0];
         if(nowH===ah&&nowM===am){const k=`todo-${t.id}-due`;if(!dismissedRef.current.has(k))alerts.push({id:k,title:`Due today: ${t.title}`,time:t.dueTime||""});}
       });
+      // Habit reminders: show from reminder time until done (or dismissed), within 90 min
+      (habits||[]).forEach(h=>{
+        if(!h.reminderTime||!isHabitScheduled(h,nowStr)||h.completions?.[nowStr])return;
+        const[rh,rm]=h.reminderTime.split(":").map(Number),since=(nowH*60+nowM)-(rh*60+rm);
+        if(since>=0&&since<=90){
+          const k=`habit-${h.id}-${nowStr}`;
+          if(!dismissedRef.current.has(k))alerts.push({id:k,title:`${h.track==="spanish-clinical"?"🇪🇸 ":""}${h.title}${h.durationMin?" · "+fmtMins(h.durationMin):""} — ${(h.detail||"").split(/(?<=\.)\s/)[0]}`,time:h.reminderTime});
+        }
+      });
       // Project nudges
       (projects||[]).filter(p=>p.status==="active"&&p.nudgeDays).forEach(p=>{
         if(projectIdle(p).overdue){
@@ -967,10 +1114,15 @@ function useReminderEngine(events,todos,projects){
           }
         }
       });
-      if(alerts.length)setActiveAlerts(prev=>{const ids=new Set(prev.map(a=>a.id));const nn=alerts.filter(a=>!ids.has(a.id));return nn.length?[...prev,...nn]:prev;});
+      const liveHabitKeys=new Set(alerts.filter(a=>a.id.startsWith("habit-")).map(a=>a.id));
+      setActiveAlerts(prev=>{
+        const kept=prev.filter(a=>!a.id.startsWith("habit-")||liveHabitKeys.has(a.id)); // drop reminders for habits now done
+        const ids=new Set(kept.map(a=>a.id));const nn=alerts.filter(a=>!ids.has(a.id));
+        return (nn.length||kept.length!==prev.length)?[...kept,...nn]:prev;
+      });
     };
     check();const iv=setInterval(check,30000);return()=>clearInterval(iv);
-  },[events,todos]);
+  },[events,todos,habits]);
   const dismiss=id=>{dismissedRef.current.add(id);setActiveAlerts(prev=>prev.filter(a=>a.id!==id));};
   return{activeAlerts,dismiss};
 }
@@ -1182,7 +1334,7 @@ function TodaySummary({events,todos,habits,projects,theme}){
 
   const urgentTodos=todos.filter(t=>!t.completed&&(t.dueDate===today||t.priority==="high")).slice(0,5);
 
-  const todayHabits=habits.filter(h=>h.frequency==="daily"||(h.daysOfWeek||[]).includes(todayDow));
+  const todayHabits=habits.filter(h=>isHabitScheduled(h,today));
   const habitsDone=todayHabits.filter(h=>h.completions?.[today]).length;
 
   const nextEvents=todayEvents.filter(e=>{
@@ -1607,10 +1759,11 @@ function MonthlyReviewModal({habits, theme, startDate, onClose, onSetGoal}){
 
 function HabitsPanel({habits,theme,startDate,onAdd,onToggleDay,onDelete,onSetGoals}){
   const [showModal,setShowModal]=useState(false);
+  const [openDetail,setOpenDetail]=useState(null);
   const [showReview,setShowReview]=useState(false);
   const [form,setForm]=useState({title:"",frequency:"daily",daysOfWeek:[0,1,2,3,4,5,6],weeklyTarget:null});
   const today=todayStr(),todayDow=new Date().getDay();
-  const relevant=habits.filter(h=>h.frequency==="daily"||(h.daysOfWeek||[]).includes(todayDow));
+  const relevant=habits.filter(h=>isHabitScheduled(h,today));
   const doneToday=relevant.filter(h=>h.completions?.[today]).length;
   const save=()=>{if(!form.title.trim())return;onAdd({...form,id:genId(),title:form.title.trim(),completions:{},monthlyGoals:{},weeklyTarget:form.weeklyTarget||null});setForm({title:"",frequency:"daily",daysOfWeek:[0,1,2,3,4,5,6]});setShowModal(false);};
   const toggleDow=dow=>setForm(f=>({...f,daysOfWeek:f.daysOfWeek.includes(dow)?f.daysOfWeek.filter(d=>d!==dow):[...f.daysOfWeek,dow]}));
@@ -1657,7 +1810,15 @@ function HabitsPanel({habits,theme,startDate,onAdd,onToggleDay,onDelete,onSetGoa
           {relevant.map(h=>{const done=!!h.completions?.[today];return(
             <div key={h.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 8px",background:theme.bg,borderRadius:7}}>
               <button onClick={()=>onToggleDay(h.id,today)} style={{width:22,height:22,border:`2px solid ${done?theme.accent:theme.muted}`,borderRadius:6,background:done?theme.accent:"transparent",cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",color:"#000",fontSize:"0.8rem",fontWeight:700,padding:0,transition:"all 0.2s"}}>{done?"✓":""}</button>
-              <span style={{flex:1,fontSize:"0.85rem",color:theme.text,textDecoration:done?"line-through":"none",opacity:done?0.5:1}}>{h.title}</span>
+              <div style={{flex:1,minWidth:0,cursor:h.detail?"pointer":"default"}} onClick={()=>h.detail&&setOpenDetail(o=>o===h.id?null:h.id)}>
+                <div style={{fontSize:"0.85rem",color:theme.text,textDecoration:done?"line-through":"none",opacity:done?0.5:1}}>
+                  {h.track==="spanish-clinical"&&<span style={{marginRight:5}}>🇪🇸</span>}{h.title}
+                </div>
+                {(h.durationMin||h.reminderTime)&&<div style={{fontSize:"0.62rem",color:theme.muted,opacity:done?0.5:1}}>
+                  {[h.durationMin&&fmtMins(h.durationMin), h.reminderTime&&("⏰ "+formatTime(h.reminderTime)), h.xp&&("+"+h.xp+" XP")].filter(Boolean).join(" · ")}
+                </div>}
+                {openDetail===h.id&&<div style={{fontSize:"0.7rem",color:theme.muted,marginTop:4,lineHeight:1.4}}>{h.detail}</div>}
+              </div>
               <span style={{fontSize:"0.63rem",color:theme.muted,flexShrink:0}}>{h.frequency==="daily"?"Daily":h.daysOfWeek?.map(d=>DAYS[d]).join(" ")}</span>
               <button onClick={()=>onDelete(h.id)} style={{background:"none",border:"none",color:theme.muted,cursor:"pointer",fontSize:"0.8rem",opacity:0.5,flexShrink:0}}>✕</button>
             </div>
@@ -1982,7 +2143,7 @@ function SettingsPanel({settings,theme,onSave,onClose}){
           </button>
           <button onClick={async()=>{
             const d = JSON.parse(localStorage.getItem("jarvis_data_v7")||"{}");
-            const result = await syncEventsToServer(d.events||[], d.todos||[]);
+            const result = await syncEventsToServer(d.events||[], d.todos||[], d.habits||[]);
             alert(result ? "Synced! Check JSONBin." : "Sync failed — check console.");
           }} style={{flex:1,background:"transparent",border:`1px solid ${theme.border}`,borderRadius:7,padding:"8px",color:theme.muted,cursor:"pointer",fontSize:"0.75rem"}}>
             🔄 Sync schedule
@@ -2005,7 +2166,7 @@ function buildSystemPrompt(data, weatherRef){
   const upcomingEvents = (data.events||[]).filter(e=>e.date>todayS).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,8);
   const activeTodos = (data.todos||[]).filter(t=>!t.completed).slice(0,10);
   const activeProjects = (data.projects||[]).filter(p=>p.status==="active");
-  const todayHabits = (data.habits||[]).filter(h=>h.frequency==="daily"||(h.daysOfWeek||[]).includes(todayDow));
+  const todayHabits = (data.habits||[]).filter(h=>isHabitScheduled(h,todayS));
   const habitsDoneToday = todayHabits.filter(h=>h.completions?.[todayS]);
   const rewards = data.rewards||{};
   const level = calcLevel(rewards.xp||0);
@@ -2048,6 +2209,15 @@ function buildSystemPrompt(data, weatherRef){
     "REWARDS: Level "+level+", "+( rewards.xp||0)+" XP, streak: "+(rewards.currentStreak||0)+" days",
     (()=>{ const du=data.dailyUnlock||DEFAULT_DATA.dailyUnlock; const st=calcDailyUnlock(data.habits,data.todos);
       return "DAILY UNLOCK ("+du.title+"): "+(du.claims?.[todayStr()]?"claimed today":st.unlocked?"unlocked, not yet claimed":"locked, "+st.done+"/"+st.total+" done; still needed: "+st.items.filter(i=>!i.done).map(i=>i.title).join(", "))+"; claim streak "+calcClaimStreak(du.claims)+" days"; })(),
+    (()=>{ const th=trackHabits(data.habits); if(!th.length) return "";
+      const wk=spanishWeekStatus(data.habits,getCurrentWeekKey()); const pim=th.find(h=>h.id==="pimsleur-daily");
+      const todayList=th.filter(h=>isHabitScheduled(h,todayS)).map(h=>(h.completions?.[todayS]?"[DONE] ":"[    ] ")+h.title+" ("+h.durationMin+"m, "+formatTime(h.reminderTime)+")");
+      const got=Object.keys(data.spanishTrack?.badges||{}).map(id=>SPANISH_TRACK.badges.find(b=>b.id===id)?.name).filter(Boolean);
+      return "SPANISH PLAN (Clinical Spanish for pediatric visits, Pimsleur + Langua, started "+formatDate(SPANISH_TRACK.startDate)+"): today: "+(todayList.join(" | ")||"rest day")
+        +"; this week "+wk.done+"/"+wk.total+(wk.fullKept?" (full week kept)":wk.minimumKept?" (minimum kept)":"")
+        +"; minimum rule: Pimsleur every scheduled day + Wednesday output session; Pimsleur streak "+(pim?habitStreak(pim):0)
+        +"; badges earned: "+(got.join(", ")||"none")
+        +". Weekly rhythm: Pimsleur Mon-Sat 7:30am; Mon input, Tue drill, Wed output, Thu drill, Fri consolidate at 7pm; Sat immersion 10am; café en español Tue/Thu noon."; })(),
     weatherRef?"WEATHER: "+weatherRef:"",
     "",
     "TONY CONTEXT: Pediatrician at Woodcreek (4 days/wk). Plays for the Pilots baseball team. Tuesday run club. Rock climbs, lifts. Learning Spanish. ADHD. DIY car soundproofing (2024 Civic Sport Touring). Fantasy football, gaming, Seinfeld, Dungeon Crawler Carl. University Place WA.",
@@ -2262,6 +2432,120 @@ function GoalRewardPanel({habits, goalRewards, startDate, theme, onSave, onCeleb
 
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── CLINICAL SPANISH PANEL ──────────────────────────────────────────────────
+function SpanishPanel({habits, spanishTrack, theme, onClaimMilestone}){
+  const [show,setShow]=useState(true);
+  const [confirming,setConfirming]=useState(null);
+  const [openBadges,setOpenBadges]=useState(false);
+  const today=todayStr();
+  const started=today>=SPANISH_TRACK.startDate;
+  const wk=getCurrentWeekKey();
+  const week=spanishWeekStatus(habits, wk);
+  const th=trackHabits(habits);
+  const pim=th.find(h=>h.id==="pimsleur-daily");
+  const cafe=th.find(h=>h.id==="cafe-espanol");
+  const {kept}=spanishWeeksKept(habits);
+  const earned=spanishTrack?.badges||{};
+  const todayItems=th.filter(h=>isHabitScheduled(h,today));
+  const red="#ef4444", green="#22c55e", amber="#f59e0b";
+  const btn={background:"none",border:`1px solid ${theme.border}`,borderRadius:6,color:theme.muted,cursor:"pointer",fontSize:"0.72rem",padding:"3px 8px"};
+  if(!th.length) return null;
+
+  let weekLine, weekColor;
+  if(!started){ weekLine="Starts "+new Date(SPANISH_TRACK.startDate+"T12:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"}); weekColor=theme.muted; }
+  else if(week.fullKept){ weekLine="Full week kept"; weekColor=green; }
+  else if(week.minimumKept){ weekLine="Minimum kept · rest is bonus"; weekColor=amber; }
+  else if(week.minimumAlive){ weekLine="Minimum: Pimsleur every day + Wed output"; weekColor=theme.muted; }
+  else { weekLine="Minimum missed this week"; weekColor=red; }
+
+  return(
+    <div style={{background:theme.panel,border:`1px solid ${theme.border}`,borderRadius:10,padding:14}}>
+      <SectionHeader title="🇪🇸 Clinical Spanish" accent={amber} action={
+        <button onClick={()=>setShow(s=>!s)} style={btn}>{show?"Collapse":"Expand"}</button>
+      }/>
+      <div style={{fontSize:"0.72rem",color:theme.muted,marginTop:-4,marginBottom:10}}>{SPANISH_TRACK.goal}</div>
+
+      {/* Stats row */}
+      <div style={{display:"flex",gap:8,marginBottom:10}}>
+        {[["Pimsleur",pim?habitStreak(pim):0,"🔥"],["Café",cafe?habitStreak(cafe):0,"☕"],["Weeks kept",kept,"✅"],["This week",week.done+"/"+week.total,"📅"]].map(([l,v,i])=>(
+          <div key={l} style={{flex:1,background:theme.bg,borderRadius:7,padding:"6px 4px",textAlign:"center"}}>
+            <div style={{fontSize:"0.9rem",fontWeight:700,color:theme.text}}>{i}{v}</div>
+            <div style={{fontSize:"0.58rem",color:theme.muted}}>{l}</div>
+          </div>
+        ))}
+      </div>
+
+      {show && <>
+        {/* Week strip */}
+        <div style={{display:"flex",gap:4,marginBottom:6}}>
+          {week.days.map((d,i)=>{
+            const isToday=d.ds===today, past=d.ds<today;
+            return(
+              <div key={d.ds} style={{flex:1,textAlign:"center",padding:"5px 0",borderRadius:7,background:isToday?`${amber}22`:theme.bg,border:`1px solid ${isToday?amber:"transparent"}`}}>
+                <div style={{fontSize:"0.58rem",color:isToday?amber:theme.muted,fontWeight:isToday?700:400}}>{["M","T","W","T","F","S","S"][i]}</div>
+                <div style={{display:"flex",flexWrap:"wrap",justifyContent:"center",gap:2,marginTop:3,minHeight:8}}>
+                  {d.items.map(it=>(
+                    <span key={it.id} title={it.title} style={{width:7,height:7,borderRadius:"50%",background:it.done?green:past?red:theme.border}}/>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{fontSize:"0.7rem",color:weekColor,fontWeight:600,marginBottom:10}}>{weekLine}</div>
+
+        {/* Today */}
+        {started && (
+          <div style={{marginBottom:10}}>
+            <div style={{fontSize:"0.62rem",color:theme.muted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Today</div>
+            {todayItems.length===0
+              ? <div style={{fontSize:"0.78rem",color:theme.muted}}>Rest day. Even gremlins sleep. (We don't.)</div>
+              : todayItems.map(h=>(
+                <div key={h.id} style={{display:"flex",alignItems:"center",gap:8,fontSize:"0.78rem",color:theme.text,padding:"2px 0"}}>
+                  <span style={{color:h.completions?.[today]?green:theme.muted}}>{h.completions?.[today]?"✓":"○"}</span>
+                  <span style={{flex:1,textDecoration:h.completions?.[today]?"line-through":"none",opacity:h.completions?.[today]?0.6:1}}>{h.title}</span>
+                  <span style={{fontSize:"0.62rem",color:theme.muted}}>{formatTime(h.reminderTime)}</span>
+                </div>
+              ))}
+            {todayItems.length>0&&<div style={{fontSize:"0.6rem",color:theme.muted,marginTop:3}}>Check these off in Daily Habits.</div>}
+          </div>
+        )}
+
+        {/* Badges */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+          <div style={{fontSize:"0.62rem",color:theme.muted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Badges · {Object.keys(earned).length}/{SPANISH_TRACK.badges.length}</div>
+          <button onClick={()=>setOpenBadges(o=>!o)} style={btn}>{openBadges?"Hide":"Show"}</button>
+        </div>
+        {openBadges && (
+          <div style={{display:"flex",flexDirection:"column",gap:5}}>
+            {SPANISH_TRACK.badges.map(b=>{
+              const got=earned[b.id];
+              return(
+                <div key={b.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 8px",background:theme.bg,borderRadius:7,opacity:got?1:0.85}}>
+                  <span style={{fontSize:"1.2rem",filter:got?"none":"grayscale(1)",opacity:got?1:0.5}}>{b.icon}</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:"0.8rem",fontWeight:700,color:got?amber:theme.text}}>{b.name} <span style={{fontSize:"0.62rem",color:theme.muted,fontWeight:400}}>+{b.xp} XP</span></div>
+                    <div style={{fontSize:"0.66rem",color:theme.muted,lineHeight:1.35}}>
+                      {b.month?`Month ${b.month} (~${formatDate(milestoneTargetDate(b.month))}): `:""}{b.detail}
+                    </div>
+                    {got&&<div style={{fontSize:"0.6rem",color:green,marginTop:2}}>Earned {formatDate(got)}</div>}
+                  </div>
+                  {!got && b.month && (
+                    confirming===b.id
+                      ? <button onClick={()=>{onClaimMilestone(b);setConfirming(null);}} style={{...btn,background:amber,color:"#000",border:"none",fontWeight:700}}>Confirm</button>
+                      : <button onClick={()=>setConfirming(b.id)} style={btn}>I did it</button>
+                  )}
+                  {!got && b.auto && <span style={{fontSize:"0.6rem",color:theme.muted,flexShrink:0}}>auto</span>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </>}
     </div>
   );
 }
@@ -2931,7 +3215,7 @@ function App(){
           // Ensure monthlyGoals on all habits
           const migratedHabits=[...patchedHabits,...newHabits];
 
-          const finalData={
+          const finalData=installSpanishTrack({
             ...saved,
             events:mergedEvents,
             notes:saved.notes||[],
@@ -2944,8 +3228,8 @@ function App(){
             goalRewards:saved.goalRewards||DEFAULT_DATA.goalRewards,
             dailyUnlock:saved.dailyUnlock||DEFAULT_DATA.dailyUnlock,
             habits:migratedHabits,
-          };
-          if(!hasPilots||newHabits.length>0){
+          });
+          if(!hasPilots||newHabits.length>0||!saved.spanishTrack?.installed){
             await pwaStorage.set(STORAGE_KEY,JSON.stringify(finalData));
           }
           setData(finalData);
@@ -2956,13 +3240,12 @@ function App(){
           try{ const extra=localStorage.getItem(REVIEW_KEY); if(extra&&(!lastReview||extra>lastReview)) lastReview=extra; }catch{}
           if(lastReview!==mk){ setTimeout(()=>setShowMonthlyPrompt(true),2000); }
           // Sync upcoming events to server for contextual push notifications
-          setTimeout(()=>syncEventsToServer(finalData.events||[], finalData.todos||[]), 3000);
         } else {
-          setData(DEFAULT_DATA);
+          setData(installSpanishTrack(DEFAULT_DATA));
           setTimeout(()=>setShowMonthlyPrompt(true),2000);
         }
       }
-      catch{setData(DEFAULT_DATA);}
+      catch{setData(installSpanishTrack(DEFAULT_DATA));}
       setLoading(false);
       // Request notification permission
       if('Notification' in window && Notification.permission==='default'){
@@ -3062,13 +3345,40 @@ function App(){
     setInput("");
   };
 
-  const {activeAlerts,dismiss}=useReminderEngine(data?.events||[],data?.todos||[],data?.projects||[]);
+  const {activeAlerts,dismiss}=useReminderEngine(data?.events||[],data?.todos||[],data?.projects||[],data?.habits||[]);
+
+  // Keep the server's reminder copy current: sync a few seconds after events/todos/habits change
+  useEffect(()=>{
+    if(!data) return;
+    const t=setTimeout(()=>syncEventsToServer(data.events||[], data.todos||[], data.habits||[]), 4000);
+    return ()=>clearTimeout(t);
+  },[data?.events, data?.todos, data?.habits]);
+
+  // Spanish badges: record once, award XP, celebrate
+  const dataRef=useRef(null); dataRef.current=data;
+  const awardedRef=useRef(new Set());
+  const awardSpanishBadge=useCallback(b=>{
+    if(!b || awardedRef.current.has(b.id) || dataRef.current?.spanishTrack?.badges?.[b.id]) return;
+    awardedRef.current.add(b.id);
+    update(d=>{
+      const st=d.spanishTrack||{};
+      if(st.badges?.[b.id]) return d;
+      return {...d, spanishTrack:{...st, badges:{...(st.badges||{}), [b.id]:todayStr()}}};
+    });
+    earnXP(b.xp);
+    setNewBadge({icon:b.icon,name:b.name,desc:b.detail+" · +"+b.xp+" XP"});
+  },[update,earnXP]);
+  useEffect(()=>{
+    if(!data?.spanishTrack?.installed) return;
+    const have=data.spanishTrack.badges||{};
+    spanishAutoBadges(data.habits).filter(id=>!have[id]).forEach(id=>awardSpanishBadge(SPANISH_TRACK.badges.find(b=>b.id===id)));
+  },[data?.habits]);
 
   if(loading||!data)return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0a0e1a",color:"#38bdf8",fontFamily:"system-ui"}}>Loading…</div>;
 
   const themeBase=THEMES[data.settings.theme]||THEMES.dark;
   const theme={...themeBase,accent:data.settings.accent||themeBase.accent};
-  const safeD={...data,projects:data.projects||[],notes:data.notes||[],habits:(data.habits||[]).map(h=>({...h,monthlyGoals:h.monthlyGoals||{}})),rewardStore:data.rewardStore||DEFAULT_DATA.rewardStore,goalRewards:data.goalRewards||DEFAULT_DATA.goalRewards,dailyUnlock:data.dailyUnlock||DEFAULT_DATA.dailyUnlock};
+  const safeD={...data,projects:data.projects||[],notes:data.notes||[],habits:(data.habits||[]).map(h=>({...h,monthlyGoals:h.monthlyGoals||{}})),rewardStore:data.rewardStore||DEFAULT_DATA.rewardStore,goalRewards:data.goalRewards||DEFAULT_DATA.goalRewards,dailyUnlock:data.dailyUnlock||DEFAULT_DATA.dailyUnlock,spanishTrack:data.spanishTrack||{installed:false,badges:{}}};
 
   return(
     <div style={{minHeight:"100vh",background:theme.bg,color:theme.text,fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",padding:"12px 16px",maxWidth:680,margin:"0 auto",boxSizing:"border-box"}}>
@@ -3165,18 +3475,19 @@ function App(){
           onUpdate={n=>save({...safeD,notes:safeD.notes.map(x=>x.id===n.id?n:x)})}
           onDelete={id=>save({...safeD,notes:safeD.notes.filter(n=>n.id!==id)})}
         />
-        <EventsPanel events={safeD.events} theme={theme} onAdd={ev=>{const updated={...safeD,events:[...safeD.events,ev]};save(updated);syncEventsToServer(updated.events,updated.todos);}} onDelete={id=>save({...safeD,events:safeD.events.filter(e=>e.id!==id)})}/>
-        <TodoPanel todos={safeD.todos} theme={theme} onAdd={t=>{const updated={...safeD,todos:[...safeD.todos,t]};save(updated);syncEventsToServer(updated.events,updated.todos);}} onToggle={id=>{
+        <EventsPanel events={safeD.events} theme={theme} onAdd={ev=>{const updated={...safeD,events:[...safeD.events,ev]};save(updated);}} onDelete={id=>save({...safeD,events:safeD.events.filter(e=>e.id!==id)})}/>
+        <TodoPanel todos={safeD.todos} theme={theme} onAdd={t=>{const updated={...safeD,todos:[...safeD.todos,t]};save(updated);}} onToggle={id=>{
               const t=safeD.todos.find(t=>t.id===id);
               const completing=t&&!t.completed;
               save({...safeD,todos:safeD.todos.map(t=>t.id===id?{...t,completed:!t.completed}:t)});
               if(completing){earnXP(XP_PER_TODO,{totalTodos:(safeD.rewards?.totalTodos||0)+1});showToast(pick(QUIPS.todoComplete));}
             }} onDelete={id=>save({...safeD,todos:safeD.todos.filter(t=>t.id!==id)})}/>
+        <SpanishPanel habits={safeD.habits} spanishTrack={safeD.spanishTrack} theme={theme} onClaimMilestone={awardSpanishBadge}/>
         <HabitsPanel habits={safeD.habits} theme={theme} startDate={safeD.settings?.trackingStartDate||"2026-09-01"} onSetGoals={updated=>save({...safeD,habits:updated})} onAdd={h=>save({...safeD,habits:[...safeD.habits,h]})} onToggleDay={(id,date)=>{
               const h=safeD.habits.find(h=>h.id===id);
               const wasOff=h&&!h.completions?.[date];
               save({...safeD,habits:safeD.habits.map(h=>h.id===id?{...h,completions:{...h.completions,[date]:!h.completions?.[date]}}:h)});
-              if(wasOff){earnXP(XP_PER_HABIT,{totalHabits:(safeD.rewards?.totalHabits||0)+1});showToast(pick(QUIPS.habitComplete));}
+              if(wasOff){earnXP(h.xp||XP_PER_HABIT,{totalHabits:(safeD.rewards?.totalHabits||0)+1});showToast(pick(QUIPS.habitComplete));}
             }} onDelete={id=>save({...safeD,habits:safeD.habits.filter(h=>h.id!==id)})}/>
       </div>
 

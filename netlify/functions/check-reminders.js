@@ -14,6 +14,33 @@ function formatTime(t) {
   return `${h12}:${String(m).padStart(2,"0")} ${ampm}`;
 }
 
+// Pacific date, minutes since midnight, and weekday (0=Sun) — DST-safe
+function pacificNow(d) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", hourCycle: "h23", weekday: "short",
+    }).formatToParts(d).map(p => [p.type, p.value])
+  );
+  return {
+    todayStr: `${parts.year}-${parts.month}-${parts.day}`,
+    nowMins: Number(parts.hour) * 60 + Number(parts.minute),
+    dow: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(parts.weekday),
+  };
+}
+
+// Habit reminder is due on the first run at/after its time (runs are 30 min apart)
+function habitReminderDue(h, todayStr, nowMins, dow) {
+  if (!h.reminderTime) return false;
+  if (h.startDate && todayStr < h.startDate) return false;
+  const scheduled = h.frequency === "daily" || (h.daysOfWeek || []).includes(dow);
+  if (!scheduled) return false;
+  if ((h.doneDates || []).includes(todayStr)) return false;
+  const [rh, rm] = h.reminderTime.split(":").map(Number);
+  const since = nowMins - (rh * 60 + rm);
+  return since >= 0 && since < 30;
+}
+
 async function sendNtfy(title, message, priority = "default", tags = ["bell"]) {
   await fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
     method: "POST",
@@ -49,12 +76,8 @@ exports.handler = async (event) => {
   const events = data?.events || [];
   const todos = data?.todos || [];
 
-  // Current time in Pacific
-  const now = new Date();
-  const pacificOffset = -7; // PDT (summer); change to -8 for PST (winter)
-  const pacificNow = new Date(now.getTime() + pacificOffset * 60 * 60 * 1000);
-  const todayStr = pacificNow.toISOString().slice(0, 10);
-  const nowMins = pacificNow.getUTCHours() * 60 + pacificNow.getUTCMinutes();
+  // Current time in Pacific (handles daylight saving automatically)
+  const { todayStr, nowMins, dow } = pacificNow(new Date());
 
   const notifications = [];
 
@@ -102,14 +125,30 @@ exports.handler = async (event) => {
     }
   }
 
+  // Habit reminders (e.g. Spanish plan)
+  const habits = data?.habits || [];
+  for (const h of habits) {
+    if (!habitReminderDue(h, todayStr, nowMins, dow)) continue;
+    const firstSentence = (h.detail || "").split(/(?<=\.)\s/)[0];
+    notifications.push({
+      title: `${h.title}${h.durationMin ? " · " + h.durationMin + " min" : ""}`,
+      message: firstSentence || `Time for ${h.title}.`,
+      priority: "default",
+      tags: ["books"],
+    });
+  }
+
   // Fire all notifications
   await Promise.allSettled(
     notifications.map(n => sendNtfy(n.title, n.message, n.priority, n.tags))
   );
 
-  console.log(`Checked ${events.length} events, ${todos.length} todos. Sent ${notifications.length} notifications.`);
+  console.log(`Checked ${events.length} events, ${todos.length} todos, ${habits.length} habits. Sent ${notifications.length} notifications.`);
   return {
     statusCode: 200,
     body: JSON.stringify({ checked: events.length + todos.length, sent: notifications.length }),
   };
 };
+
+// Exposed for testing
+exports._test = { pacificNow, habitReminderDue };

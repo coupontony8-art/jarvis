@@ -38,10 +38,11 @@ exports.handler = async (event) => {
   const data = {
     events: payload.events || [],
     todos: payload.todos || [],
+    habits: payload.habits || [],
     updatedAt: new Date().toISOString(),
   };
 
-  console.log("Writing to JSONBin:", BIN_ID, "Events:", data.events.length, "Todos:", data.todos.length);
+  console.log("Writing to JSONBin:", BIN_ID, "Events:", data.events.length, "Todos:", data.todos.length, "Habits:", data.habits.length);
 
   try {
     // JSONBin v3 PUT to update bin content
