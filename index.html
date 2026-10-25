@@ -3451,30 +3451,7 @@ function App(){
           onToast={showToast}
         />
         <RewardsPanel rewards={safeD.rewards} theme={theme}/>
-        <GoalRewardPanel
-          habits={safeD.habits}
-          goalRewards={safeD.goalRewards||DEFAULT_DATA.goalRewards}
-          startDate={safeD.settings?.trackingStartDate||"2026-09-01"}
-          theme={theme}
-          onSave={gr=>save({...safeD,goalRewards:gr})}
-          onCelebrate={(type,restaurant)=>setGoalCelebration({type,restaurant})}
-        />
-        <RewardStorePanel
-          rewards={safeD.rewards}
-          rewardStore={safeD.rewardStore||[]}
-          theme={theme}
-          onRedeem={id=>{
-            const item=(safeD.rewardStore||[]).find(r=>r.id===id);
-            if(!item||( safeD.rewards?.spendableXp||0)<item.cost) return;
-            const newStore=(safeD.rewardStore||[]).map(r=>r.id===id?{...r,redeemed:(r.redeemed||0)+1}:r);
-            const newRewards={...safeD.rewards,spendableXp:(safeD.rewards?.spendableXp||0)-item.cost};
-            save({...safeD,rewardStore:newStore,rewards:newRewards});
-            showToast(item.emoji+" "+item.title+" — "+pick(QUIPS.rewardRedeemed));
-          }}
-          onAdd={r=>save({...safeD,rewardStore:[...(safeD.rewardStore||[]),r]})}
-          onDelete={id=>save({...safeD,rewardStore:(safeD.rewardStore||[]).filter(r=>r.id!==id)})}
-          onEdit={r=>save({...safeD,rewardStore:(safeD.rewardStore||[]).map(x=>x.id===r.id?r:x)})}
-        />
+        {/* Reward Store and weekly/monthly meal rewards retired (Oct 2026) — Daily Unlock is the reward now. Data kept. */}
         <WeatherWidget theme={theme}/>
         <CalendarPanel events={safeD.events} todos={safeD.todos} theme={theme}/>
         <ProjectsPanel
