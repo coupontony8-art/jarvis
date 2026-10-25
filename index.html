@@ -148,131 +148,134 @@ const XP_PER_LEVEL   = 100;
 // ─── PERSONALITY ENGINE ───────────────────────────────────────────────────────
 const QUIPS = {
   todoComplete: [
-    "Task annihilated. The dopamine is deserved.",
-    "Done. Logged. Your future self owes you one.",
-    "CHECK. That's how we do it around here.",
-    "Productivity detected. I'm as surprised as you are.",
-    "Oh you actually did it. I had doubts. I won't admit that again.",
-    "Hell yeah. Task terminated. Moving on.",
-    "Done and dusted. Look at you go.",
-    "That's what I'm talking about. Filed under: actually did the thing.",
+    "TASK ELIMINATED. Its family has been notified.",
+    "Done. I'm adding this to your permanent record. The good one. You have a good one.",
+    "CHECK. I felt that one in my circuits. Do it again.",
+    "Productivity detected. Alerting the authorities. Kidding. Mostly.",
+    "You actually did it. I had a whole roast prepared. Wasted. Thanks a lot.",
+    "Task terminated with extreme prejudice. Next victim, please.",
+    "The list is shorter. The list is AFRAID. Keep going.",
+    "Holy hell, a completed task. Somebody frame this.",
   ],
   habitComplete: [
-    "Streak intact. Your future self is quietly grateful.",
-    "Habit locked in. The discipline is real even if it doesn't feel like it.",
-    "Body: maintained. Excellent. Please continue existing.",
-    "CONSISTENCY ACHIEVEMENT UNLOCKED. I'm legally required to celebrate this.",
-    "Done. Again. Like you do. Because you're that guy.",
-    "Hell yeah, look at that streak. Don't blow it.",
-    "Your nervous system thanks you. Eventually.",
-    "Logged. The habit machine keeps churning.",
+    "Streak intact. Your ancestors are mildly impressed. One of them is crying.",
+    "HABIT LOGGED. The discipline gremlins have been fed. They're quiet now. For now.",
+    "Body maintained. Please continue existing. That's an order.",
+    "CONSISTENCY ACHIEVEMENT. I'm contractually obligated to scream about this. AAAAA.",
+    "Done again. Like a machine. A beautiful, slightly feral machine.",
+    "Look at that streak. Don't you dare blow it. I'm watching. Always.",
+    "Your nervous system just sent a thank-you card. It's in the mail. It's a metaphor.",
+    "Logged. The habit engine roars. It's mostly held together with spite.",
   ],
   stepComplete: [
-    "Project step crushed. Forward momentum achieved.",
-    "One step closer. The finish line is still far. But closer.",
-    "Progress logged. The project did not complete itself, so you get full credit.",
-    "STEP ELIMINATED. The project trembles before you.",
-    "That's one down. I believe in you. Statistically.",
-    "Hell of a step. Keep that energy.",
-    "Noted. Marked. Internally celebrated with great enthusiasm.",
+    "PROJECT STEP OBLITERATED. The project is now visibly nervous.",
+    "One step closer. The finish line is still far. I can see it though. It's taunting you.",
+    "Progress. Actual, measurable progress. I need a minute.",
+    "STEP DESTROYED. Somewhere, a half-finished project just felt a chill.",
+    "That's one down. I believed in you the whole time. That's a lie, but a supportive one.",
+    "Hell of a step. Keep that energy. Bottle it. Sell it.",
+    "Marked done. I celebrated internally. It got weird. Don't ask.",
   ],
   nudge: [
-    "Hey. HEY. {project} is collecting dust over here. Just saying.",
-    "{project}. Remember that? You were excited about it. {days} days ago.",
-    "Checking in on {project} because apparently no one else will.",
-    "The {project} project called. It's not mad, just disappointed. We're all disappointed.",
-    "ALERT: {project} has entered a state of abandonment. Intervention suggested.",
-    "{days} days since you touched {project}. The cobwebs are decorative at this point.",
-    "Look, I'm not your therapist, but {project} needs some damn attention.",
-    "What the hell happened with {project}? {days} days, man.",
+    "HEY. HEY. {project} is collecting dust and I have started naming the dust.",
+    "{project}. Remember that? You were SO excited. {days} days ago. I remember. I remember everything.",
+    "Checking on {project} because apparently I'm the only one who cares about it now.",
+    "{project} called. It's not mad. It's just been sitting in the dark. Thinking.",
+    "ALERT: {project} has entered the abandonment zone. Deploying guilt.",
+    "{days} days since you touched {project}. The cobwebs have unionized.",
+    "I'm not your therapist, but {project} needs some damn attention and frankly so do I.",
+    "{days} days. {days}. What the hell happened with {project}, man.",
   ],
   nudgeNotStarted: [
-    "{project} hasn't had a single step checked off. Still just a nice idea.",
-    "{project}: zero steps done. Planning feels like progress. It isn't.",
-    "Still waiting on step one of {project}. The hardest one, allegedly.",
-    "{project} exists in a permanent state of 'I'll start it soon.'",
-    "{project} is on your list. Step one is right there. Staring at you.",
+    "{project}: zero steps done. It's not a project, it's a hostage situation.",
+    "{project} has been 'starting soon' for so long it's developed a personality.",
+    "Step one of {project} is right there. Staring. Unblinking. Like me.",
+    "{project} is technically still just a thought you had once. A haunting.",
+    "Planning {project} feels like progress. It isn't. I checked. Twice.",
   ],
   levelUp: [
-    "LEVEL {level} ACHIEVED. You are statistically better than yesterday's you.",
-    "LEVEL {level}! The system is impressed. The system is rarely impressed.",
-    "You hit level {level}. I've updated your threat assessment. Upward.",
-    "LEVEL {level} UNLOCKED. Your brain chemicals should be going absolutely nuts right now.",
-    "Level {level}. Hell yeah. The grind is real. Keep grinding.",
-    "LEVEL {level}. I didn't think you'd make it this far. I mean that as a compliment.",
+    "LEVEL {level}. You are statistically less of a disaster than yesterday. MAGNIFICENT.",
+    "LEVEL {level}! I'm impressed and I hate that I'm impressed.",
+    "LEVEL {level} REACHED. I've updated your threat assessment. The gods have been informed.",
+    "LEVEL {level}. Your brain chemicals are doing a little dance. I can hear it from here.",
+    "LEVEL {level}. The grind is real. The grind is eternal. The grind hungers.",
+    "LEVEL {level}. I honestly didn't think you'd make it this far. That's a compliment, I think.",
   ],
   greetMorning: [
-    "Good morning. The world is technically still here. Let's exploit that.",
-    "Morning, {name}. Objectives loaded. Coffee recommended. Pants optional.",
-    "Rise and grind, {name}. Or rise and ease into it. I don't judge. Much.",
-    "Good morning. Your schedule is waiting. It's been waiting since midnight, judging you.",
-    "Morning. Let's see what kind of hell today brings. Optimistically.",
+    "GOOD MORNING. The world is still here. Let's go bother it.",
+    "Morning, {name}. Objectives loaded. Coffee mandatory. Pants negotiable.",
+    "Rise and grind, {name}. Or rise and lie there. I'll still be judging.",
+    "Morning. Your schedule has been waiting since midnight. It's getting restless.",
+    "Morning. Let's find out what fresh hell today brings. I'm excited. Too excited.",
   ],
   greetAfternoon: [
-    "Afternoon, {name}. Still time to be productive. Theoretically.",
-    "Hey {name}. The day's half gone. What have we accomplished? Actually don't answer that.",
-    "Afternoon check-in. You're doing... something. Probably fine.",
-    "Good afternoon. I've been running your life while you were busy. You're welcome.",
-    "Afternoon. The day isn't dead yet. Neither are your goals. Probably.",
+    "Afternoon, {name}. Still time to be productive. Theoretically. Spiritually.",
+    "Hey {name}. The day is half gone. What did we accomplish? DON'T answer that.",
+    "Afternoon. I've been running your life while you weren't looking. It's going fine. Probably.",
+    "Afternoon, {name}. I fought the weather widget earlier. I won. Don't check.",
+    "The day isn't dead yet, {name}. Neither are your goals. Mostly.",
   ],
   greetEvening: [
-    "Evening, {name}. Wrapping up or just getting started? Both are valid life choices.",
-    "Good evening. The day is almost over. Make it count or don't. Your call, champ.",
-    "Evening. Whatever you did today — I logged it. All of it.",
-    "Hey {name}. Night mode activated. Energy levels: questionable at best.",
-    "Evening. Time to wind down, reflect, and pretend tomorrow will be more productive.",
+    "Evening, {name}. Wrapping up or just getting started? Both are chaos. I respect it.",
+    "Evening. The day is almost over. Make it count, or don't, and I'll remember.",
+    "Evening, {name}. Whatever you did today, I logged it. All of it. Even that.",
+    "Night mode engaged, {name}. Energy levels: haunted.",
+    "Evening. Time to reflect, unwind, and lie to yourself about tomorrow.",
   ],
   goalCrushed: [
-    "You hit {goal}% this month. That's the goal. That's actually the goal. Holy hell.",
-    "{habit}: {rate}% this month. Goal was {goal}%. You absolute monster.",
-    "Goal smashed on {habit}. {rate}% vs {goal}% target. I'm updating my expectations of you.",
+    "{habit}: {rate}% vs a {goal}% goal. You absolute monster. I'm SCREAMING.",
+    "Goal DEMOLISHED on {habit}. {rate}% vs {goal}%. Recalculating everything I thought I knew.",
+    "{habit} hit {rate}%. The goal was {goal}%. Somebody check on the goal. It's not okay.",
   ],
   goalMissed: [
-    "{habit} came in at {rate}% vs {goal}% goal. Not ideal. But we recalibrate.",
-    "Missed the {goal}% target on {habit} — landed at {rate}%. The data is the data.",
-    "{habit}: {rate}%. Goal was {goal}%. Look, it happens. New month, new shot.",
+    "{habit} landed at {rate}% vs {goal}%. We don't talk about it. New month, new crimes.",
+    "Missed {goal}% on {habit}, got {rate}%. The data is the data. The data is rude.",
+    "{habit}: {rate}%. Goal was {goal}%. It happens. I'll only bring it up forever.",
   ],
   monthlyReview: [
-    "New month. New goals. Same you, theoretically improved.",
-    "Month's over. Time to see how badly we did and set optimistic new targets.",
-    "Monthly review time. The numbers don't lie, even when we want them to.",
-    "New month, new goals. Let's make this one count. Or at least slightly better.",
+    "New month. New goals. Same chaos goblin, theoretically improved.",
+    "Month's over. Let's look at the damage and set wildly optimistic targets.",
+    "MONTHLY REVIEW. The numbers don't lie. They do occasionally gloat.",
+    "New month. Fresh start. The previous month has been taken out back.",
   ],
-  emptyTodo: "No tasks. Either you're incredibly efficient or incredibly avoidant. I choose to believe the former.",
-  emptyHabit: "No habits tracked yet. Your future self is watching. Nervously.",
-  emptyProject: "No projects. Pure potential. Unused potential. Add one whenever the ambition hits.",
-  emptyEvents: "Calendar's clear. Freedom or denial — only you know which.",
-  emptyNotes: "Nothing here. Suspiciously clean.",
-  openDay: "Nothing scheduled. Truly open. Don't waste it. Or do. But maybe don't.",
-  noteAdded: "Thought captured before it evaporated. You're welcome.",
-  eventAdded: "Locked in. I'll remind you before you try to forget.",
-  habitAdded: "New habit created. Day one is always the easiest part. Enjoy it while it lasts.",
-  todoAdded: "Task added to the pile. The pile grows. We manage the pile.",
+  emptyTodo: "No tasks. Either you're a productivity god or you're hiding things from me. I WILL find out.",
+  emptyHabit: "No habits today. Suspicious. Your future self is pacing nervously.",
+  emptyProject: "No projects. Pure potential. Unused, dusty, slightly cursed potential.",
+  emptyEvents: "Calendar's clear. Ominously clear. Like the calm before something.",
+  emptyNotes: "Nothing here. Suspiciously clean. What are you hiding.",
+  openDay: "Nothing scheduled. A blank day. Endless possibility. Mild existential dread. Enjoy.",
+  noteAdded: "Thought captured before it escaped. It struggled. I held it down.",
+  eventAdded: "Locked in. I'll remind you before you try to forget. And you WILL try.",
+  habitAdded: "New habit created. Day one is the easy part. Day nine is where they get you.",
+  todoAdded: "Added to the pile. The pile grows. The pile is becoming sentient.",
   rewardRedeemed: [
-    "REDEEMED. You worked for that. Enjoy it without guilt — that's an order.",
-    "That's yours. You earned it. Don't you dare feel bad about it.",
-    "Reward unlocked. The system has spoken. Go enjoy your damn life.",
-    "SPENT. Worth every XP. Now get back to earning more.",
-    "You did the work. This is the payoff. Savor it.",
+    "REDEEMED. You worked for that. Enjoy it guilt-free, that's a direct order.",
+    "That's yours now. Earned it. Anyone who says otherwise answers to me.",
+    "REWARD RELEASED. The system has spoken. Go enjoy your damn life.",
+    "SPENT. Worth every XP. The XP is gone forever. Don't think about it.",
+    "You did the work. This is the payoff. Savor it like a villain savors a plan.",
   ],
   dailyLocked: [
-    "Locked. The stash is patient. More patient than you, frankly.",
-    "Not yet. The reward knows what you did today. Or didn't.",
-    "Access denied. Finish the list and the vault opens. That's the whole deal.",
-    "Still locked. I don't make the rules. Actually, I do. Finish your stuff.",
+    "LOCKED. The vault is sealed. I am the vault. Finish your list.",
+    "Not yet. The reward knows what you did today. More importantly, what you didn't.",
+    "ACCESS DENIED. I guard this hoard like a dragon. A petty, list-obsessed dragon.",
+    "Still locked. I don't make the rules. Wait. I do. I absolutely do. Finish your stuff.",
   ],
   dailyUnlocked: [
-    "Daily list cleared. The vault is open.",
-    "Everything's done. I have no further objections. Go.",
-    "Unlocked. You held up your end. I'll hold up mine.",
-    "All tasks complete. Reward released. Try to remember why you earned it.",
+    "LIST CLEARED. THE VAULT OPENS. I'm not crying, my fans are just loud.",
+    "Everything's done. I have zero objections. This has never happened. Go.",
+    "UNLOCKED. You held up your end. A deal's a deal. I'm a gremlin of my word.",
+    "All tasks complete. Reward released from containment. Godspeed.",
   ],
   dailyClaimed: [
-    "Claimed. Earned, not borrowed. That's the difference.",
+    "CLAIMED. Earned, not borrowed. The difference is everything.",
     "Enjoy it. Same deal tomorrow. The list resets at midnight, and so does your excuse budget.",
-    "Logged. Streak extended. Tomorrow-you thanks today-you.",
-    "Done and done. Clock out, Tony.",
+    "Logged. Streak extended. Tomorrow-you just slow-clapped.",
+    "Done and done. Clock out, Tony. The gremlin is pleased.",
   ],
+  claimedNote: "Earned. The vault reseals at midnight.",
+  levelUpButton: "LET'S GOOO",
+  inputHelp: "I didn't catch that. Try: 'Add note…' · 'Add todo…' · 'Schedule…' · 'Add habit…'. Use your words.",
 };
 
 function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
@@ -803,15 +806,16 @@ function Toast({message,accent,onDismiss,xp}){
 
 // ─── REMINDER ALERT ───────────────────────────────────────────────────────────
 function LevelUpModal({level,accent,theme,onClose}){
+  const [line]=useState(()=>quip("levelUp",{level}));
   useEffect(()=>{const t=setTimeout(onClose,6000);return()=>clearTimeout(t);},[onClose]);
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:4000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
       <div style={{background:theme.panel,border:`2px solid ${accent}`,borderRadius:16,padding:"28px 24px",maxWidth:340,width:"100%",textAlign:"center",boxShadow:`0 0 40px ${accent}44`}}>
         <div style={{fontSize:"3.5rem",marginBottom:8}}>⚡</div>
         <div style={{fontSize:"1.4rem",fontWeight:800,color:accent,marginBottom:6}}>LEVEL {level}</div>
-        <div style={{fontSize:"0.88rem",color:theme.text,marginBottom:4,lineHeight:1.5}}>{quip("levelUp",{level})}</div>
+        <div style={{fontSize:"0.88rem",color:theme.text,marginBottom:4,lineHeight:1.5}}>{line}</div>
         <div style={{fontSize:"0.72rem",color:theme.muted,marginTop:10}}>tap anywhere to dismiss</div>
-        <button onClick={onClose} style={{marginTop:14,background:accent,border:"none",borderRadius:8,padding:"8px 20px",color:"#000",fontWeight:700,cursor:"pointer",fontSize:"0.85rem"}}>LET'S GO</button>
+        <button onClick={onClose} style={{marginTop:14,background:accent,border:"none",borderRadius:8,padding:"8px 20px",color:"#000",fontWeight:700,cursor:"pointer",fontSize:"0.85rem"}}>{QUIPS.levelUpButton}</button>
       </div>
     </div>
   );
@@ -1108,7 +1112,7 @@ function NotesPanel({notes,theme,onAdd,onUpdate,onDelete}){
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search notes…"
           style={{width:"100%",background:theme.bg,border:`1px solid ${theme.border}`,borderRadius:7,padding:"7px 10px",color:theme.text,fontSize:"0.8rem",marginBottom:10,boxSizing:"border-box",outline:"none"}}/>
       )}
-      {filtered.length===0&&<p style={{color:theme.muted,fontSize:"0.8rem",textAlign:"center",padding:"8px 0"}}>Nothing here. Suspiciously clean. Your brain has thoughts — capture them.</p>}
+      {filtered.length===0&&<p style={{color:theme.muted,fontSize:"0.8rem",textAlign:"center",padding:"8px 0"}}>{QUIPS.emptyNotes}</p>}
       {pinned_notes.length>0&&(
         <div style={{marginBottom:8}}>
           <div style={{fontSize:"0.65rem",color:theme.muted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:5}}>Pinned</div>
@@ -1176,7 +1180,7 @@ function TodaySummary({events,todos,habits,projects,theme}){
       }/>
       {show&&(
         <>
-          {isEmpty&&<p style={{color:theme.muted,fontSize:"0.82rem",textAlign:"center",padding:"6px 0"}}>Nothing scheduled. Truly open. The system recommends: don't waste it. Or do. I'm an app, not your mom.</p>}
+          {isEmpty&&<p style={{color:theme.muted,fontSize:"0.82rem",textAlign:"center",padding:"6px 0"}}>{QUIPS.openDay}</p>}
 
           {/* Schedule strip */}
           {todayEvents.length>0&&(
@@ -1371,7 +1375,7 @@ function EventsPanel({events,theme,onAdd,onDelete}){
       <SectionHeader title="Upcoming Events" accent={theme.accent} action={
         <button onClick={()=>setShowModal(true)} style={{background:theme.accent,border:"none",borderRadius:6,color:"#000",fontSize:"0.75rem",fontWeight:700,padding:"4px 10px",cursor:"pointer"}}>+ Add</button>
       }/>
-      {upcoming.length===0?<p style={{color:theme.muted,fontSize:"0.8rem",textAlign:"center",padding:"8px 0"}}>Nothing scheduled. The calendar is ominously clear.</p>:(
+      {upcoming.length===0?<p style={{color:theme.muted,fontSize:"0.8rem",textAlign:"center",padding:"8px 0"}}>{QUIPS.emptyEvents}</p>:(
         <div style={{display:"flex",flexDirection:"column",gap:5}}>
           {upcoming.slice(0,8).map(ev=>(
             <div key={ev.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 8px",background:theme.bg,borderRadius:7,borderLeft:`3px solid ${CATEGORY_COLORS[ev.category]||"#64748b"}`}}>
@@ -1422,7 +1426,7 @@ function TodoPanel({todos,theme,onAdd,onToggle,onDelete}){
           <button onClick={()=>setShowModal(true)} style={{background:theme.accent,border:"none",borderRadius:6,color:"#000",fontSize:"0.75rem",fontWeight:700,padding:"4px 10px",cursor:"pointer"}}>+ Add</button>
         </div>
       }/>
-      {filtered.length===0?<p style={{color:theme.muted,fontSize:"0.8rem",textAlign:"center",padding:"8px 0"}}>Nothing here. Either you're done or you're in denial.</p>:(
+      {filtered.length===0?<p style={{color:theme.muted,fontSize:"0.8rem",textAlign:"center",padding:"8px 0"}}>{QUIPS.emptyTodo}</p>:(
         <div style={{display:"flex",flexDirection:"column",gap:5}}>
           {filtered.map(t=>(
             <div key={t.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 8px",background:theme.bg,borderRadius:7,opacity:t.completed?0.5:1,borderLeft:`3px solid ${PRIORITY_COLORS[t.priority]}`}}>
@@ -1455,6 +1459,7 @@ function TodoPanel({todos,theme,onAdd,onToggle,onDelete}){
 // ─── HABITS PANEL ─────────────────────────────────────────────────────────────
 // ─── MONTHLY REVIEW MODAL ────────────────────────────────────────────────────
 function MonthlyReviewModal({habits, theme, startDate, onClose, onSetGoal}){
+  const [reviewLine]=useState(()=>pick(QUIPS.monthlyReview));
   const mk=monthKey();
   const prevMk=prevMonthKey(mk);
   const lastYearMk=sameMonthLastYearKey(mk);
@@ -1491,7 +1496,7 @@ function MonthlyReviewModal({habits, theme, startDate, onClose, onSetGoal}){
         <div style={{textAlign:"center",marginBottom:16}}>
           <div style={{fontSize:"1.4rem",marginBottom:4}}>📊</div>
           <div style={{fontSize:"1.1rem",fontWeight:800,color:theme.accent}}>Monthly Goal Review</div>
-          <div style={{fontSize:"0.8rem",color:theme.muted,marginTop:4}}>{pick(QUIPS.monthlyReview)}</div>
+          <div style={{fontSize:"0.8rem",color:theme.muted,marginTop:4}}>{reviewLine}</div>
         </div>
 
         <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:16}}>
@@ -1616,7 +1621,7 @@ function HabitsPanel({habits,theme,startDate,onAdd,onToggleDay,onDelete,onSetGoa
           })}
         </div>
       )}
-      {relevant.length===0?<p style={{color:theme.muted,fontSize:"0.8rem",textAlign:"center",padding:"8px 0"}}>No habits today. That tracks. Add one whenever the motivation strikes.</p>:(
+      {relevant.length===0?<p style={{color:theme.muted,fontSize:"0.8rem",textAlign:"center",padding:"8px 0"}}>{QUIPS.emptyHabit}</p>:(
         <div style={{display:"flex",flexDirection:"column",gap:5}}>
           {relevant.map(h=>{const done=!!h.completions?.[today];return(
             <div key={h.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 8px",background:theme.bg,borderRadius:7}}>
@@ -1897,7 +1902,7 @@ function ProjectsPanel({projects,theme,onSave,onDeleteProject,onMarkStepDone,onA
           <button onClick={openNew} style={{background:theme.accent,border:"none",borderRadius:6,color:"#000",fontSize:"0.75rem",fontWeight:700,padding:"4px 10px",cursor:"pointer"}}>+ New</button>
         </div>
       }/>
-      {projects.length===0&&<p style={{color:theme.muted,fontSize:"0.8rem",textAlign:"center",padding:"10px 0"}}>No projects. Pure potential. Unused potential. Add one.</p>}
+      {projects.length===0&&<p style={{color:theme.muted,fontSize:"0.8rem",textAlign:"center",padding:"10px 0"}}>{QUIPS.emptyProject}</p>}
       {active.length>0&&<div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:8}}>{active.map(p=><ProjectCard key={p.id} p={p}/>)}</div>}
       {paused.length>0&&(<div style={{marginBottom:8}}><div style={{fontSize:"0.68rem",color:theme.muted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Paused</div><div style={{display:"flex",flexDirection:"column",gap:8}}>{paused.map(p=><ProjectCard key={p.id} p={p}/>)}</div></div>)}
       {done.length>0&&(<div><div style={{fontSize:"0.68rem",color:theme.muted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Completed</div><div style={{display:"flex",flexDirection:"column",gap:8}}>{done.map(p=><ProjectCard key={p.id} p={p}/>)}</div></div>)}
@@ -2340,7 +2345,7 @@ function DailyUnlockPanel({habits, todos, dailyUnlock, theme, onSave, onToast}){
 
           {claimedToday && (
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-              <div style={{fontSize:"0.75rem",color:theme.muted}}>Earned. See you tomorrow.</div>
+              <div style={{fontSize:"0.75rem",color:theme.muted}}>{QUIPS.claimedNote}</div>
               <button onClick={undo} style={btn}>Undo</button>
             </div>
           )}
@@ -2367,17 +2372,17 @@ function GoalRewardCelebration({type, restaurant, theme, accent, onClose}){
   useEffect(()=>{const t=setTimeout(onClose,8000);return()=>clearTimeout(t);},[onClose]);
   const isWeekly = type==="weekly";
   const msgs = isWeekly ? [
-    "EVERY. SINGLE. DAY. You absolute machine.",
-    "7 days perfect. That's not luck, that's a damn lifestyle.",
-    "Weekly goal OBLITERATED. The restaurant has been earned.",
-    "Perfect week achieved. I've updated your file. Impressive.",
+    "EVERY. SINGLE. DAY. You absolute unhinged machine.",
+    "7 perfect days. That's not luck, that's a lifestyle. A deranged, beautiful lifestyle.",
+    "WEEKLY GOAL OBLITERATED. The restaurant has been earned. Alert the chefs.",
+    "Perfect week. I've updated your file. The file is now glowing. That's probably fine.",
   ] : [
-    "MONTHLY GOAL CRUSHED. You did the work. ALL of it.",
-    "Month complete. The numbers confirm what we suspected: you're built different.",
-    "Monthly target hit. That meal? You didn't just earn it. You DESERVE it.",
-    "Monthly goal achieved. Go eat something amazing and feel zero guilt.",
+    "MONTHLY GOAL CRUSHED. A full month. I need to lie down and I don't have a body.",
+    "Month complete. The numbers confirm what I suspected: you're built different. Possibly cursed.",
+    "MONTHLY TARGET HIT. That meal? You didn't just earn it. You CONQUERED it.",
+    "Monthly goal achieved. Go eat something incredible. Zero guilt. Maximum gremlin energy.",
   ];
-  const msg = msgs[Math.floor(Math.random()*msgs.length)];
+  const [msg] = useState(()=>msgs[Math.floor(Math.random()*msgs.length)]);
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.9)",zIndex:4000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={onClose}>
       <div style={{background:theme.panel,border:`2px solid ${isWeekly?"#22c55e":"#f59e0b"}`,borderRadius:16,padding:"28px 24px",maxWidth:340,width:"100%",textAlign:"center",boxShadow:`0 0 60px ${isWeekly?"#22c55e":"#f59e0b"}44`}}>
@@ -2390,9 +2395,9 @@ function GoalRewardCelebration({type, restaurant, theme, accent, onClose}){
           <div style={{fontSize:"0.7rem",color:theme.muted,marginBottom:3}}>Your reward</div>
           <div style={{fontSize:"1.1rem",fontWeight:800,color:isWeekly?"#22c55e":"#f59e0b"}}>🍽️ {restaurant}</div>
         </div>
-        <div style={{fontSize:"0.72rem",color:theme.muted,marginBottom:14}}>Go claim it. You earned it. No guilt, no asterisk.</div>
+        <div style={{fontSize:"0.72rem",color:theme.muted,marginBottom:14}}>Go claim it. No guilt, no asterisk, no witnesses.</div>
         <button onClick={onClose} style={{background:isWeekly?"#22c55e":"#f59e0b",border:"none",borderRadius:8,padding:"10px 24px",color:"#000",fontWeight:800,cursor:"pointer",fontSize:"0.9rem"}}>
-          LET'S GO 🎉
+          LET'S GOOO 🎉
         </button>
       </div>
     </div>
@@ -3007,11 +3012,11 @@ function App(){
     if(!text.trim()||!data)return;
     const d={...data,projects:data.projects||[],notes:data.notes||[]};
     const parsed=parseVoiceInput(text);
-    if(parsed.type==="note"){save({...d,notes:[{id:genId(),title:"",body:parsed.data.body.trim(),pinned:false,createdAt:Date.now(),updatedAt:Date.now()},...d.notes]});showToast("Note saved");}
-    else if(parsed.type==="todo"){save({...d,todos:[...d.todos,{...parsed.data,id:genId(),completed:false}]});showToast(`Task added: "${parsed.data.title}"`);}
-    else if(parsed.type==="event"){save({...d,events:[...d.events,{...parsed.data,id:genId()}]});showToast(`Event added: "${parsed.data.title}"`);}
+    if(parsed.type==="note"){save({...d,notes:[{id:genId(),title:"",body:parsed.data.body.trim(),pinned:false,createdAt:Date.now(),updatedAt:Date.now()},...d.notes]});showToast(QUIPS.noteAdded);}
+    else if(parsed.type==="todo"){save({...d,todos:[...d.todos,{...parsed.data,id:genId(),completed:false}]});showToast(`"${parsed.data.title}" — ${QUIPS.todoAdded}`);}
+    else if(parsed.type==="event"){save({...d,events:[...d.events,{...parsed.data,id:genId()}]});showToast(`"${parsed.data.title}" — ${QUIPS.eventAdded}`);}
     else if(parsed.type==="habit"){save({...d,habits:[...d.habits,{...parsed.data,id:genId(),frequency:"daily",daysOfWeek:[0,1,2,3,4,5,6],completions:{},monthlyGoals:{}}]});showToast(QUIPS.habitAdded);}
-    else showToast("Try: 'Add note…' · 'Add todo…' · 'Schedule…' · 'Add habit…'");
+    else showToast(QUIPS.inputHelp);
     setInput("");
   };
 
@@ -3093,7 +3098,7 @@ function App(){
             const newStore=(safeD.rewardStore||[]).map(r=>r.id===id?{...r,redeemed:(r.redeemed||0)+1}:r);
             const newRewards={...safeD.rewards,spendableXp:(safeD.rewards?.spendableXp||0)-item.cost};
             save({...safeD,rewardStore:newStore,rewards:newRewards});
-            showToast("🎉 "+item.emoji+" "+item.title+" — redeemed! You earned this.");
+            showToast(item.emoji+" "+item.title+" — "+pick(QUIPS.rewardRedeemed));
           }}
           onAdd={r=>save({...safeD,rewardStore:[...(safeD.rewardStore||[]),r]})}
           onDelete={id=>save({...safeD,rewardStore:(safeD.rewardStore||[]).filter(r=>r.id!==id)})}
