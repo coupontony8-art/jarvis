@@ -123,6 +123,7 @@ const { useState, useEffect, useRef, useCallback } = React;
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const STORAGE_KEY = "jarvis_data_v7";
+const REVIEW_KEY = "jarvis_last_monthly_review";
 const THEMES = {
   dark:     { bg:"#0a0e1a", panel:"#111827", border:"#1e2d45", text:"#e2e8f0", muted:"#64748b", accent:"#38bdf8" },
   midnight: { bg:"#06060f", panel:"#0d0d1f", border:"#1a1a3e", text:"#c7d2fe", muted:"#6366f1", accent:"#818cf8" },
@@ -2920,7 +2921,8 @@ function App(){
 
           // Auto monthly review prompt
           const mk=monthKey();
-          const lastReview=saved.settings?.lastMonthlyReview;
+          let lastReview=saved.settings?.lastMonthlyReview;
+          try{ const extra=localStorage.getItem(REVIEW_KEY); if(extra&&(!lastReview||extra>lastReview)) lastReview=extra; }catch{}
           if(lastReview!==mk){ setTimeout(()=>setShowMonthlyPrompt(true),2000); }
           // Sync upcoming events to server for contextual push notifications
           setTimeout(()=>syncEventsToServer(finalData.events||[], finalData.todos||[]), 3000);
@@ -2939,6 +2941,15 @@ function App(){
   },[]);
 
   const save=useCallback(async nd=>{setData(nd);try{await pwaStorage.set(STORAGE_KEY,JSON.stringify(nd));}catch{}},[]);
+  // Apply a change to the LATEST data (avoids two saves in a row clobbering each other)
+  const update=useCallback(fn=>{
+    setData(prev=>{ if(!prev) return prev; const nd=fn(prev); pwaStorage.set(STORAGE_KEY,JSON.stringify(nd)).catch(()=>{}); return nd; });
+  },[]);
+  const markMonthReviewed=()=>{
+    const mk=monthKey();
+    try{ localStorage.setItem(REVIEW_KEY, mk); }catch{}
+    update(d=>({...d,settings:{...d.settings,lastMonthlyReview:mk}}));
+  };
   const showToast=msg=>setToast(msg);
 
   const earnXP=useCallback((amount, newStats={})=>{
@@ -3034,11 +3045,12 @@ function App(){
       {levelUpModal&&<LevelUpModal level={levelUpModal} accent={theme.accent} theme={theme} onClose={()=>setLevelUpModal(null)}/>}
       {goalCelebration&&<GoalRewardCelebration type={goalCelebration.type} restaurant={goalCelebration.restaurant} theme={theme} accent={theme.accent} onClose={()=>setGoalCelebration(null)}/>}
       {showMonthlyPrompt&&(
-        <MonthlyReviewModal habits={safeD.habits} theme={theme}
-          onClose={()=>{setShowMonthlyPrompt(false);save({...safeD,settings:{...safeD.settings,lastMonthlyReview:monthKey()}});}}
+        <MonthlyReviewModal habits={safeD.habits} theme={theme} startDate={safeD.settings?.trackingStartDate||"2026-09-01"}
+          onClose={()=>{setShowMonthlyPrompt(false);markMonthReviewed();}}
           onSetGoal={goals=>{
-            const updated=safeD.habits.map(h=>({...h,monthlyGoals:{...h.monthlyGoals||{},[monthKey()]:goals[h.id]}}));
-            save({...safeD,habits:updated,settings:{...safeD.settings,lastMonthlyReview:monthKey()}});
+            const mk=monthKey();
+            update(d=>({...d,habits:(d.habits||[]).map(h=>({...h,monthlyGoals:{...h.monthlyGoals||{},[mk]:goals[h.id]}}))}));
+            markMonthReviewed();
             setShowMonthlyPrompt(false);
           }}
         />
