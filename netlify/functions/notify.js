@@ -73,14 +73,14 @@ exports.handler = async (event) => {
       return {
         statusCode: response.status,
         headers: { "Access-Control-Allow-Origin": "*" },
-        body: JSON.stringify({ error: err }),
+        body: JSON.stringify({ error: err, topic: NTFY_TOPIC }),
       };
     }
 
     return {
       statusCode: 200,
       headers: { "Access-Control-Allow-Origin": "*" },
-      body: JSON.stringify({ ok: true }),
+      body: JSON.stringify({ ok: true, topic: NTFY_TOPIC }),
     };
   } catch (e) {
     return {

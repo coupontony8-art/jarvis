@@ -70,7 +70,7 @@ exports.handler = async (event) => {
     return {
       statusCode: 200,
       headers: { "Access-Control-Allow-Origin": "*" },
-      body: JSON.stringify({ ok: true, events: data.events.length, todos: data.todos.length }),
+      body: JSON.stringify({ ok: true, events: data.events.length, todos: data.todos.length, habits: data.habits.length }),
     };
   } catch (e) {
     console.error("Fetch error:", e.message);

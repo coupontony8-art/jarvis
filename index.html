@@ -66,15 +66,20 @@ const pwaStorage = {
 
 // ─── SERVICE WORKER REGISTRATION ─────────────────────────────────────────────
 // ─── NTFY NOTIFICATION HELPER ────────────────────────────────────────────────
+// Returns {ok, status, topic, error} so callers (like the Settings test) can report what happened
 async function sendNotification(title, message, priority="default", tags=["bell"]) {
   try {
-    await fetch("/.netlify/functions/notify", {
+    const res = await fetch("/.netlify/functions/notify", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title, message, priority, tags }),
     });
+    let data = {};
+    try { data = await res.json(); } catch { data = { error: "Unexpected response from notify function" }; }
+    return { ok: res.ok && !!data.ok, status: res.status, topic: data.topic, error: data.error };
   } catch(e) {
     console.log("Notification failed:", e.message);
+    return { ok: false, status: 0, error: e.message };
   }
 }
 
@@ -105,11 +110,13 @@ async function syncEventsToServer(events, todos, habits) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    const result = await res.json();
+    let result = {};
+    try { result = await res.json(); } catch { result = { error: "Unexpected response from sync function" }; }
     console.log("Sync result:", res.status, result);
-    return result;
+    return { ...result, ok: res.ok && !!result.ok, status: res.status };
   } catch(e) {
     console.log("Sync failed:", e.message);
+    return { ok: false, status: 0, error: e.message };
   }
 }
 
@@ -1998,15 +2005,21 @@ function SettingsPanel({settings,theme,onSave,onClose}){
         <div style={{fontSize:"0.73rem",color:"#94a3b8",marginBottom:6}}>Notifications</div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
           <button onClick={async()=>{
-            await sendNotification("Jarvis","Notifications are working. Hell yeah.","default",["white_check_mark"]);
-            alert("Test sent! Check your ntfy app.");
+            const r = await sendNotification("Jarvis","Notifications are working. Hell yeah.","default",["white_check_mark"]);
+            if(r.ok){
+              alert("✅ The server sent it to ntfy topic:\n\n"+r.topic+"\n\nNothing on your phone within ~10 seconds? In the ntfy app, check you're subscribed to exactly that topic on ntfy.sh, and that your phone allows notifications from the ntfy app.");
+            } else {
+              alert("❌ Send failed"+(r.status?" (HTTP "+r.status+")":"")+":\n\n"+(r.error||"unknown error")+(r.topic?"\n\nTopic: "+r.topic:""));
+            }
           }} style={{flex:1,background:"transparent",border:`1px solid ${theme.border}`,borderRadius:7,padding:"8px",color:theme.muted,cursor:"pointer",fontSize:"0.75rem"}}>
             🧪 Test ntfy
           </button>
           <button onClick={async()=>{
             const d = JSON.parse(localStorage.getItem("jarvis_data_v7")||"{}");
             const result = await syncEventsToServer(d.events||[], d.todos||[], d.habits||[]);
-            alert(result ? "Synced! Check JSONBin." : "Sync failed — check console.");
+            alert(result?.ok
+              ? "✅ Synced "+result.events+" events, "+result.todos+" to-dos, "+result.habits+" habit reminders to the server."
+              : "❌ Sync failed"+(result?.status?" (HTTP "+result.status+")":"")+":\n\n"+(result?.error||"unknown error")+(result?.detail?"\n"+String(result.detail).slice(0,200):"")+"\n\nScheduled reminders (events, to-dos, Spanish habits) need this to work.");
           }} style={{flex:1,background:"transparent",border:`1px solid ${theme.border}`,borderRadius:7,padding:"8px",color:theme.muted,cursor:"pointer",fontSize:"0.75rem"}}>
             🔄 Sync schedule
           </button>
