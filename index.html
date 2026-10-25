@@ -554,6 +554,21 @@ function installSpanishTrack(data){
   return {...data, habits, spanishTrack:{installed:true, badges:{}, ...(data.spanishTrack||{}), installedAt:todayStr()}};
 }
 
+function normTitle(t){ return String(t||"").trim().toLowerCase(); }
+// Combine habits with the same name: first one wins its settings; check-offs
+// and monthly goals from all copies are kept.
+function mergeDuplicateHabits(habits){
+  const byTitle=new Map(), out=[];
+  (habits||[]).forEach(h=>{
+    const k=normTitle(h.title), prev=byTitle.get(k);
+    if(!prev){ const copy={...h}; byTitle.set(k,copy); out.push(copy); return; }
+    prev.completions={...(h.completions||{}), ...(prev.completions||{})};
+    Object.keys(h.completions||{}).forEach(d=>{ if(h.completions[d]) prev.completions[d]=true; });
+    prev.monthlyGoals={...(h.monthlyGoals||{}), ...(prev.monthlyGoals||{})};
+  });
+  return out;
+}
+
 // Is this habit on the schedule for a given day? (respects per-habit start date)
 function isHabitScheduled(h, ds){
   if(h.startDate && ds < h.startDate) return false;
@@ -3061,9 +3076,6 @@ function App(){
         if(res){
           const saved=JSON.parse(res.value);
 
-          // Migrate: new habits not yet in saved data
-          const savedTitles=new Set((saved.habits||[]).map(h=>h.title));
-          const newHabits=DEFAULT_DATA.habits.filter(h=>!savedTitles.has(h.title));
           // Patch habits: rename Evening->Morning workout, remove Heat/sauna
           const removeAnki=!saved.settings?.ankiRemoved; // one-time removal; a new Anki habit later is left alone
           const patchedHabits=(saved.habits||[])
@@ -3075,6 +3087,13 @@ function App(){
               }
               return{...h,monthlyGoals:h.monthlyGoals||{}};
             });
+          // Merge habits that ended up with the same name (keeps all check-off history)
+          const dedupedHabits=mergeDuplicateHabits(patchedHabits);
+          const hadDuplicates=dedupedHabits.length!==patchedHabits.length;
+          // Migrate: default habits not yet in saved data (checked AFTER renames, so a
+          // renamed habit isn't re-added as a duplicate)
+          const savedTitles=new Set(dedupedHabits.map(h=>normTitle(h.title)));
+          const newHabits=DEFAULT_DATA.habits.filter(h=>!savedTitles.has(normTitle(h.title)));
 
           // Migrate (once): therapy is now every other week from 10/27 — drop the old weekly
           // future sessions not on the new schedule; past sessions stay as history
@@ -3093,7 +3112,7 @@ function App(){
           const mergedEvents=[...(saved.events||[]),...newDefaultEvents];
 
           // Ensure monthlyGoals on all habits
-          const migratedHabits=[...patchedHabits,...newHabits];
+          const migratedHabits=[...dedupedHabits,...newHabits];
 
           const finalData=installSpanishTrack({
             ...saved,
@@ -3109,7 +3128,7 @@ function App(){
             dailyUnlock:saved.dailyUnlock||DEFAULT_DATA.dailyUnlock,
             habits:migratedHabits,
           });
-          if(!hasPilots||newHabits.length>0||!saved.spanishTrack?.installed||removeAnki||fixTherapy){
+          if(!hasPilots||newHabits.length>0||!saved.spanishTrack?.installed||removeAnki||fixTherapy||hadDuplicates){
             await pwaStorage.set(STORAGE_KEY,JSON.stringify(finalData));
           }
           setData(finalData);
