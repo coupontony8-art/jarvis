@@ -658,6 +658,10 @@ function milestoneTargetDate(months){
   const d=new Date(SPANISH_TRACK.startDate+"T12:00:00"); d.setMonth(d.getMonth()+months); return localDateStr(d);
 }
 
+// Therapy moved to every other week starting 2026-10-27 (2:00 PM)
+const THERAPY_BIWEEKLY_FROM = "2026-10-27";
+const THERAPY_BIWEEKLY_DATES = new Set(["2026-10-27", "2026-11-10", "2026-11-24", "2026-12-08", "2026-12-22", "2027-01-05", "2027-01-19", "2027-02-02", "2027-02-16", "2027-03-02", "2027-03-16", "2027-03-30", "2027-04-13", "2027-04-27"]);
+
 const DEFAULT_DATA = {
   settings:{ name:"Tony", theme:"dark", accent:"#38bdf8", trackingStartDate:"2026-09-01" },
   rewards:{ xp:0, spendableXp:0, badges:[], currentStreak:0, maxStreak:0, lastActiveDate:null, totalTodos:0, totalHabits:0, totalSteps:0, totalNotes:0, nightOwl:false, earlyBird:false },
@@ -738,16 +742,20 @@ const DEFAULT_DATA = {
     {id:genId(),title:"Therapy",date:"2026-10-06",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
     {id:genId(),title:"Therapy",date:"2026-10-13",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
     {id:genId(),title:"Therapy",date:"2026-10-20",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
-    {id:genId(),title:"Therapy",date:"2026-10-27",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
-    {id:genId(),title:"Therapy",date:"2026-11-03",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
-    {id:genId(),title:"Therapy",date:"2026-11-10",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
-    {id:genId(),title:"Therapy",date:"2026-11-17",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
-    {id:genId(),title:"Therapy",date:"2026-11-24",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
-    {id:genId(),title:"Therapy",date:"2026-12-01",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
-    {id:genId(),title:"Therapy",date:"2026-12-08",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
-    {id:genId(),title:"Therapy",date:"2026-12-15",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
-    {id:genId(),title:"Therapy",date:"2026-12-22",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
-    {id:genId(),title:"Therapy",date:"2026-12-29",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-10-27",time:"14:00",category:"appointment",notes:"Every other week — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-11-10",time:"14:00",category:"appointment",notes:"Every other week — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-11-24",time:"14:00",category:"appointment",notes:"Every other week — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-12-08",time:"14:00",category:"appointment",notes:"Every other week — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-12-22",time:"14:00",category:"appointment",notes:"Every other week — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2027-01-05",time:"14:00",category:"appointment",notes:"Every other week — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2027-01-19",time:"14:00",category:"appointment",notes:"Every other week — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2027-02-02",time:"14:00",category:"appointment",notes:"Every other week — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2027-02-16",time:"14:00",category:"appointment",notes:"Every other week — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2027-03-02",time:"14:00",category:"appointment",notes:"Every other week — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2027-03-16",time:"14:00",category:"appointment",notes:"Every other week — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2027-03-30",time:"14:00",category:"appointment",notes:"Every other week — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2027-04-13",time:"14:00",category:"appointment",notes:"Every other week — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2027-04-27",time:"14:00",category:"appointment",notes:"Every other week — 2:00 PM"},
   ], todos:[], notes:[],
   habits:[
     {id:genId(),title:"Morning workout",  frequency:"daily", daysOfWeek:[0,1,2,3,4,5,6],completions:{},monthlyGoals:{},weeklyTarget:3},
@@ -3206,6 +3214,15 @@ function App(){
               return{...h,monthlyGoals:h.monthlyGoals||{}};
             });
 
+          // Migrate (once): therapy is now every other week from 10/27 — drop the old weekly
+          // future sessions not on the new schedule; past sessions stay as history
+          const fixTherapy=!saved.settings?.therapyBiweekly;
+          if(fixTherapy){
+            saved.events=(saved.events||[])
+              .filter(e=>!(e.title==="Therapy"&&e.date>=THERAPY_BIWEEKLY_FROM&&!THERAPY_BIWEEKLY_DATES.has(e.date)))
+              .map(e=>e.title==="Therapy"&&THERAPY_BIWEEKLY_DATES.has(e.date)?{...e,notes:"Every other week — 2:00 PM"}:e);
+          }
+
           // Migrate: Pilots schedule
           const hasPilots=(saved.events||[]).some(e=>e.title&&e.title.includes("Pilots"));
           // Merge any new DEFAULT events not already in saved (by title+date)
@@ -3224,13 +3241,13 @@ function App(){
               p.title==="Learn Spanish"?{...p,title:"Spanish Practice"}:p
             ),
             rewards:{...(saved.rewards||DEFAULT_DATA.rewards), spendableXp:(saved.rewards?.spendableXp||saved.rewards?.xp||0)},
-            settings:{...(saved.settings||DEFAULT_DATA.settings), trackingStartDate:saved.settings?.trackingStartDate||"2026-09-01", ankiRemoved:true},
+            settings:{...(saved.settings||DEFAULT_DATA.settings), trackingStartDate:saved.settings?.trackingStartDate||"2026-09-01", ankiRemoved:true, therapyBiweekly:true},
             rewardStore:saved.rewardStore||DEFAULT_DATA.rewardStore,
             goalRewards:saved.goalRewards||DEFAULT_DATA.goalRewards,
             dailyUnlock:saved.dailyUnlock||DEFAULT_DATA.dailyUnlock,
             habits:migratedHabits,
           });
-          if(!hasPilots||newHabits.length>0||!saved.spanishTrack?.installed||removeAnki){
+          if(!hasPilots||newHabits.length>0||!saved.spanishTrack?.installed||removeAnki||fixTherapy){
             await pwaStorage.set(STORAGE_KEY,JSON.stringify(finalData));
           }
           setData(finalData);

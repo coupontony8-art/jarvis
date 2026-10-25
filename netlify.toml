@@ -4,7 +4,7 @@
 
 [[scheduled-functions]]
   name = "notify"
-  schedule = "0 3 * * *"  # 8pm Pacific Daylight Time = 3:00 UTC daily
+  schedule = "0 3,4 * * *"  # 8pm Pacific: 03:00 UTC (PDT) / 04:00 UTC (PST); function sends only the right one
 
 [[scheduled-functions]]
   name = "check-reminders"
@@ -12,11 +12,11 @@
 
 [[scheduled-functions]]
   name = "fantasy-thursday"
-  schedule = "30 23 * * 4"  # Thursday 4:30pm PDT = 23:30 UTC
+  schedule = "30 0,23 * * 4,5"  # Thu 4:30pm Pacific: Thu 23:30 UTC (PDT) / Fri 00:30 UTC (PST); function filters
 
 [[scheduled-functions]]
   name = "fantasy-sunday"
-  schedule = "30 16 * * 0"  # Sunday 9:30am PDT = 16:30 UTC
+  schedule = "30 16,17 * * 0"  # Sun 9:30am Pacific: 16:30 UTC (PDT) / 17:30 UTC (PST); function filters
 
 [[headers]]
   for = "/*"

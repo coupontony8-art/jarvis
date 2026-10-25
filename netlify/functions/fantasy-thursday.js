@@ -3,21 +3,41 @@
 
 const NTFY_TOPIC = process.env.NTFY_TOPIC || "tony-jarvis-2026-abc123";
 
+// Pacific date/time parts — DST-safe (Netlify cron runs in UTC)
+function pacificNow(d = new Date()) {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", hourCycle: "h23", weekday: "short",
+    }).formatToParts(d).map(x => [x.type, x.value])
+  );
+  return {
+    date: `${p.year}-${p.month}-${p.day}`,
+    hour: Number(p.hour),
+    dow: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(p.weekday),
+  };
+}
+
 const SEASON_START = "2026-09-10";
 const SEASON_END   = "2027-01-04";
 
 exports.handler = async (event) => {
-  const today = new Date().toISOString().slice(0,10);
+  // Cron fires at both possible UTC times; only send at Thursday 4pm Pacific
+  const pt = pacificNow();
+  if (pt.dow !== 4 || pt.hour !== 16) {
+    return { statusCode: 200, body: "Not Thursday 4pm Pacific, skipping" };
+  }
+  const today = pt.date;
   if (today < SEASON_START || today > SEASON_END) {
     console.log("Outside NFL season, skipping.");
     return { statusCode: 200, body: "Off season" };
   }
 
   const messages = [
-    "Thursday games kick off soon. Set your lineup before you forget. Don't leave points on the bench.",
-    "Hey. Thursday kickoff is coming. Check your lineup, check injuries, lock it in.",
-    "Fantasy check — Thursday games are almost live. Don't be that guy who forgot to start someone.",
-    "Lineup reminder. Thursday. Right now. Go.",
+    "Thursday kickoff is coming. Set your lineup or the bench gremlins eat your points.",
+    "Lineup check. NOW. Injuries, byes, that guy you keep forgetting to start. Lock it in.",
+    "Thursday game soon. If you leave points on the bench again I'm telling everyone.",
+    "LINEUP. THURSDAY. GO. This message will not self-destruct, but your season might.",
   ];
   const message = messages[Math.floor(Math.random() * messages.length)];
 
@@ -35,3 +55,5 @@ exports.handler = async (event) => {
 
   return { statusCode: 200, body: "Sent" };
 };
+
+exports._test = { pacificNow };
