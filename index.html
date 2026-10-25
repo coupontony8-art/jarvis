@@ -81,10 +81,10 @@ async function sendNotification(title, message, priority="default", tags=["bell"
 // ─── SERVER SYNC (for contextual push notifications) ─────────────────────────
 async function syncEventsToServer(events, todos) {
   try {
-    const today = new Date().toISOString().slice(0,10);
+    const today = localDateStr(new Date());
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() + 14);
-    const cutoffStr = cutoff.toISOString().slice(0,10);
+    const cutoffStr = localDateStr(cutoff);
     // Include all future events in next 14 days
     const upcoming = (events||[]).filter(e => e.date && e.date >= today && e.date <= cutoffStr);
     // Include all active todos
@@ -186,6 +186,13 @@ const QUIPS = {
     "Look, I'm not your therapist, but {project} needs some damn attention.",
     "What the hell happened with {project}? {days} days, man.",
   ],
+  nudgeNotStarted: [
+    "{project} hasn't had a single step checked off. Still just a nice idea.",
+    "{project}: zero steps done. Planning feels like progress. It isn't.",
+    "Still waiting on step one of {project}. The hardest one, allegedly.",
+    "{project} exists in a permanent state of 'I'll start it soon.'",
+    "{project} is on your list. Step one is right there. Staring at you.",
+  ],
   levelUp: [
     "LEVEL {level} ACHIEVED. You are statistically better than yesterday's you.",
     "LEVEL {level}! The system is impressed. The system is rarely impressed.",
@@ -248,6 +255,24 @@ const QUIPS = {
     "SPENT. Worth every XP. Now get back to earning more.",
     "You did the work. This is the payoff. Savor it.",
   ],
+  dailyLocked: [
+    "Locked. The stash is patient. More patient than you, frankly.",
+    "Not yet. The reward knows what you did today. Or didn't.",
+    "Access denied. Finish the list and the vault opens. That's the whole deal.",
+    "Still locked. I don't make the rules. Actually, I do. Finish your stuff.",
+  ],
+  dailyUnlocked: [
+    "Daily list cleared. The vault is open.",
+    "Everything's done. I have no further objections. Go.",
+    "Unlocked. You held up your end. I'll hold up mine.",
+    "All tasks complete. Reward released. Try to remember why you earned it.",
+  ],
+  dailyClaimed: [
+    "Claimed. Earned, not borrowed. That's the difference.",
+    "Enjoy it. Same deal tomorrow. The list resets at midnight, and so does your excuse budget.",
+    "Logged. Streak extended. Tomorrow-you thanks today-you.",
+    "Done and done. Clock out, Tony.",
+  ],
 };
 
 function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
@@ -258,6 +283,38 @@ function quip(key, vars={}){
   Object.entries(vars).forEach(([k,v])=>{ s=s.replaceAll(`{${k}}`,v); });
   return s;
 }
+// Same message all day for a given seed (no re-roll on every render)
+function stablePick(arr, seed){
+  let h=0; for(const c of seed) h=(h*31+c.charCodeAt(0))|0;
+  return arr[Math.abs(h)%arr.length];
+}
+function fillQuip(s, vars){ Object.entries(vars).forEach(([k,v])=>{ s=s.replaceAll(`{${k}}`,v); }); return s; }
+
+// Whole calendar days between a "YYYY-MM-DD" (local) and today
+function daysSinceLocal(dateStr){
+  if(!dateStr) return null;
+  const [y,m,d]=dateStr.slice(0,10).split("-").map(Number);
+  const then=new Date(y,m-1,d), now=new Date();
+  const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  return Math.round((today-then)/86400000);
+}
+
+// How long a project has sat idle, and whether it's ever been started
+function projectIdle(p){
+  const started=!!p.lastProgressDate || (p.steps||[]).some(s=>s.done);
+  const ref=p.lastProgressDate || p.createdAt || null;
+  const days=daysSinceLocal(ref);
+  return { started, days, overdue: !!p.nudgeDays && (days===null || days>=p.nudgeDays) };
+}
+
+function nudgeMessage(p){
+  const {started, days}=projectIdle(p);
+  const seed=p.id+todayStr();
+  if(!started) return fillQuip(stablePick(QUIPS.nudgeNotStarted, seed), {project:p.title});
+  const pool = days===null ? QUIPS.nudge.filter(q=>!q.includes("{days}")) : QUIPS.nudge;
+  return fillQuip(stablePick(pool, seed), {project:p.title, days});
+}
+
 function getGreeting(name){
   const h=new Date().getHours();
   if(h<12) return quip("greetMorning",{name});
@@ -332,7 +389,7 @@ function getWeekKey(date){
   const day = d.getDay();
   const diff = d.getDate() - day + (day===0?-6:1);
   const mon = new Date(d.setDate(diff));
-  return mon.toISOString().slice(0,10);
+  return localDateStr(mon);
 }
 function getCurrentWeekKey(){ return getWeekKey(new Date()); }
 
@@ -347,7 +404,7 @@ function calcWeekHabitCompletion(habits, weekStartStr, startDate){
   for(let i=0;i<7;i++){
     const d = new Date(start);
     d.setDate(start.getDate()+i);
-    const ds = d.toISOString().slice(0,10);
+    const ds = localDateStr(d);
     // Future days — skip, show as pending
     if(ds > today){ allDays.push({date:ds,done:null}); continue; }
     // Before tracking start date — skip entirely, don't count as missed
@@ -378,6 +435,49 @@ function calcMonthHabitCompletion(habits, mk, startDate){
   return {days, total:tracked, pct:tracked?Math.round((days/tracked)*100):0};
 }
 
+// ─── DAILY UNLOCK HELPERS ────────────────────────────────────────────────────
+// What has to be done today: habits scheduled today + todos due today.
+// Weekly-target habits (e.g. workout 3x/wk) only become required on a day when
+// skipping it would make the weekly target impossible.
+function calcDailyUnlock(habits, todos, dateStr){
+  const ds = dateStr || todayStr();
+  const date = new Date(ds+"T12:00:00");
+  const dow = date.getDay();
+  const weekStart = new Date(getWeekKey(date)+"T12:00:00");
+  const items = [];
+  (habits||[]).forEach(h=>{
+    const scheduled = h.frequency==="daily" ? (h.daysOfWeek||[0,1,2,3,4,5,6]).includes(dow) : (h.daysOfWeek||[]).includes(dow);
+    if(!scheduled) return;
+    const doneToday = !!h.completions?.[ds];
+    if(h.weeklyTarget){
+      let doneBefore = 0;
+      for(let d=new Date(weekStart); localDateStr(d)<ds; d.setDate(d.getDate()+1)){
+        if(h.completions?.[localDateStr(d)]) doneBefore++;
+      }
+      const daysLeftInclToday = 7 - ((dow+6)%7); // Mon=7 … Sun=1
+      const stillNeeded = h.weeklyTarget - doneBefore;
+      if(stillNeeded <= 0) return;                         // target already hit this week
+      if(!doneToday && stillNeeded < daysLeftInclToday) return; // can still skip today
+      items.push({kind:"habit", id:h.id, title:h.title, done:doneToday, note:`${doneBefore}/${h.weeklyTarget} this week`});
+      return;
+    }
+    items.push({kind:"habit", id:h.id, title:h.title, done:doneToday});
+  });
+  (todos||[]).forEach(t=>{
+    if(t.dueDate===ds) items.push({kind:"todo", id:t.id, title:t.title, done:!!t.completed});
+  });
+  const done = items.filter(i=>i.done).length;
+  return { items, done, total:items.length, unlocked: items.every(i=>i.done) };
+}
+
+function calcClaimStreak(claims){
+  let streak=0;
+  const d=new Date();
+  if(!claims?.[localDateStr(d)]) d.setDate(d.getDate()-1); // today not claimed yet doesn't break it
+  while(claims?.[localDateStr(d)]){ streak++; d.setDate(d.getDate()-1); }
+  return streak;
+}
+
 // ─── XP + LEVEL HELPERS ────────────────────────────────────────────────────────
 function calcLevel(xp){ return Math.floor(xp/XP_PER_LEVEL)+1; }
 function xpForNext(xp){ return XP_PER_LEVEL-(xp%XP_PER_LEVEL); }
@@ -405,8 +505,9 @@ function checkNewBadges(stats, earnedIds){
   return BADGE_DEFS.filter(b=>!earnedIds.includes(b.id)&&b.check(stats)).map(b=>b.id);
 }
 
+function localDateStr(d){ d=d||new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
 function genId()    { return Date.now().toString(36)+Math.random().toString(36).slice(2); }
-function todayStr() { return new Date().toISOString().slice(0,10); }
+function todayStr() { return localDateStr(new Date()); }
 function formatDate(d){ if(!d)return""; const[y,m,day]=d.split("-"); return`${m}/${day}/${y}`; }
 function formatTime(t){ if(!t)return""; const[h,m]=t.split(":"); const hh=parseInt(h); return`${hh%12||12}:${m} ${hh>=12?"PM":"AM"}`; }
 function daysInMonth(y,m){ return new Date(y,m+1,0).getDate(); }
@@ -417,6 +518,7 @@ function timeAgo(ts){ const d=Date.now()-ts; if(d<60000)return"just now"; if(d<3
 const DEFAULT_DATA = {
   settings:{ name:"Tony", theme:"dark", accent:"#38bdf8", trackingStartDate:"2026-09-01" },
   rewards:{ xp:0, spendableXp:0, badges:[], currentStreak:0, maxStreak:0, lastActiveDate:null, totalTodos:0, totalHabits:0, totalSteps:0, totalNotes:0, nightOwl:false, earlyBird:false },
+  dailyUnlock:{ title:"Evening session", emoji:"🌿", claims:{}, bestStreak:0 },
   goalRewards:{
     weekly:{
       target:"",
@@ -578,8 +680,8 @@ function parseVoiceInput(text){
   const parsedTime=timeMatch?(()=>{ let h=parseInt(timeMatch[1]); const m=timeMatch[2]||"00",ap=timeMatch[3].toLowerCase(); if(ap==="pm"&&h!==12)h+=12; if(ap==="am"&&h===12)h=0; return`${String(h).padStart(2,"0")}:${m}`; })():null;
   const datePatterns=[
     {rx:/\b(today)\b/,fn:()=>todayStr()},
-    {rx:/\b(tomorrow)\b/,fn:()=>{const d=new Date();d.setDate(d.getDate()+1);return d.toISOString().slice(0,10);}},
-    {rx:/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,fn:m=>{const t=DAYS_FULL.findIndex(d=>d.toLowerCase()===m.toLowerCase());const now=new Date();let diff=t-now.getDay();if(diff<=0)diff+=7;const d=new Date();d.setDate(d.getDate()+diff);return d.toISOString().slice(0,10);}},
+    {rx:/\b(tomorrow)\b/,fn:()=>{const d=new Date();d.setDate(d.getDate()+1);return localDateStr(d);}},
+    {rx:/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,fn:m=>{const t=DAYS_FULL.findIndex(d=>d.toLowerCase()===m.toLowerCase());const now=new Date();let diff=t-now.getDay();if(diff<=0)diff+=7;const d=new Date();d.setDate(d.getDate()+diff);return localDateStr(d);}},
     {rx:/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/,fn:(m,full)=>{const mm=full.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);if(!mm)return null;const y=mm[3]?(mm[3].length===2?"20"+mm[3]:mm[3]):new Date().getFullYear().toString();return`${y}-${mm[1].padStart(2,"0")}-${mm[2].padStart(2,"0")}`;}}
   ];
   let parsedDate=null;
@@ -839,7 +941,7 @@ function useReminderEngine(events,todos,projects){
   const dismissedRef=useRef(new Set());
   useEffect(()=>{
     const check=()=>{
-      const now=new Date(),nowStr=now.toISOString().slice(0,10),nowH=now.getHours(),nowM=now.getMinutes(),alerts=[];
+      const now=new Date(),nowStr=localDateStr(now),nowH=now.getHours(),nowM=now.getMinutes(),alerts=[];
       events.forEach(ev=>{
         if(!ev.time||ev.date!==nowStr)return;
         const[eh,em]=ev.time.split(":").map(Number),evMins=eh*60+em,nowMins=nowH*60+nowM,diff=evMins-nowMins;
@@ -853,14 +955,10 @@ function useReminderEngine(events,todos,projects){
       });
       // Project nudges
       (projects||[]).filter(p=>p.status==="active"&&p.nudgeDays).forEach(p=>{
-        const last=p.lastProgressDate?new Date(p.lastProgressDate):null;
-        const daysSince=last?Math.floor((Date.now()-last.getTime())/86400000):999;
-        const neverStarted=p.steps.every(s=>!s.done);
-        if(daysSince>=p.nudgeDays){
+        if(projectIdle(p).overdue){
           const k=`nudge-${p.id}-${nowStr}`;
           if(!dismissedRef.current.has(k)){
-            const msg=neverStarted?quip("nudge",{project:p.title,days:"?"}):quip("nudge",{project:p.title,days:daysSince});
-            alerts.push({id:k,title:msg,time:"",type:"nudge"});
+            alerts.push({id:k,title:nudgeMessage(p),time:"",type:"nudge"});
           }
         }
       });
@@ -1066,9 +1164,7 @@ function TodaySummary({events,todos,habits,projects,theme}){
   // Project nudges for Today view
   const nudgeProjects=(projects||[]).filter(p=>{
     if(p.status!=="active"||!p.nudgeDays)return false;
-    const last=p.lastProgressDate?new Date(p.lastProgressDate):null;
-    const daysSince=last?Math.floor((Date.now()-last.getTime())/86400000):999;
-    return daysSince>=p.nudgeDays;
+    return projectIdle(p).overdue;
   });
 
   const isEmpty=todayEvents.length===0&&urgentTodos.length===0&&todayHabits.length===0&&nudgeProjects.length===0;
@@ -1141,16 +1237,13 @@ function TodaySummary({events,todos,habits,projects,theme}){
               <div style={{fontSize:"0.68rem",color:theme.muted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Overdue check-in</div>
               <div style={{display:"flex",flexDirection:"column",gap:4}}>
                 {nudgeProjects.map(p=>{
-                  const last=p.lastProgressDate?new Date(p.lastProgressDate):null;
-                  const daysSince=last?Math.floor((Date.now()-last.getTime())/86400000):null;
-                  const neverStarted=p.steps.every(s=>!s.done);
                   return(
                     <div key={p.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:theme.bg,borderRadius:7,borderLeft:`3px solid ${p.color||theme.accent}`}}>
                       <span style={{fontSize:"1rem",flexShrink:0}}>🔔</span>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:"0.82rem",fontWeight:600,color:theme.text}}>{p.title}</div>
                         <div style={{fontSize:"0.7rem",color:theme.muted}}>
-                          {neverStarted?quip("nudge",{project:p.title,days:"?"}):quip("nudge",{project:p.title,days:daysSince})}
+                          {nudgeMessage(p)}
                         </div>
                       </div>
                     </div>
@@ -1684,7 +1777,7 @@ function ProjectsPanel({projects,theme,onSave,onDeleteProject,onMarkStepDone,onA
   const saveForm=()=>{
     if(!form.title.trim())return;
     if(showEdit){onSave(projects.map(p=>p.id===showEdit?{...form,id:p.id}:p));setShowEdit(null);}
-    else{onSave([...projects,{...form,id:genId()}]);setShowNew(false);}
+    else{onSave([...projects,{...form,id:genId(),createdAt:todayStr()}]);setShowNew(false);}
   };
   const progressOf=p=>!p.steps.length?0:Math.round((p.steps.filter(s=>s.done).length/p.steps.length)*100);
   const nextStepOf=p=>p.type==="linear"?p.steps.find(s=>!s.done)||null:p.steps.filter(s=>!s.done)[0]||null;
@@ -1903,6 +1996,8 @@ function buildSystemPrompt(data, weatherRef){
     "PROJECTS: "+(activeProjects.length?activeProjects.map(fmtProject).join(" | "):"None"),
     "HABITS today ("+habitsDoneToday.length+"/"+todayHabits.length+"): "+(todayHabits.length?todayHabits.map(fmtHabit).join(" | "):"None"),
     "REWARDS: Level "+level+", "+( rewards.xp||0)+" XP, streak: "+(rewards.currentStreak||0)+" days",
+    (()=>{ const du=data.dailyUnlock||DEFAULT_DATA.dailyUnlock; const st=calcDailyUnlock(data.habits,data.todos);
+      return "DAILY UNLOCK ("+du.title+"): "+(du.claims?.[todayStr()]?"claimed today":st.unlocked?"unlocked, not yet claimed":"locked, "+st.done+"/"+st.total+" done; still needed: "+st.items.filter(i=>!i.done).map(i=>i.title).join(", "))+"; claim streak "+calcClaimStreak(du.claims)+" days"; })(),
     weatherRef?"WEATHER: "+weatherRef:"",
     "",
     "TONY CONTEXT: Pediatrician at Woodcreek (4 days/wk). Plays for the Pilots baseball team. Tuesday run club. Rock climbs, lifts. Learning Spanish. ADHD. DIY car soundproofing (2024 Civic Sport Touring). Fantasy football, gaming, Seinfeld, Dungeon Crawler Carl. University Place WA.",
@@ -2115,6 +2210,138 @@ function GoalRewardPanel({habits, goalRewards, startDate, theme, onSave, onCeleb
             )}
           </div>
 
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── DAILY UNLOCK PANEL ──────────────────────────────────────────────────────
+function DailyUnlockPanel({habits, todos, dailyUnlock, theme, onSave, onToast}){
+  const du = dailyUnlock || DEFAULT_DATA.dailyUnlock;
+  const today = todayStr();
+  const status = calcDailyUnlock(habits, todos, today);
+  const claimedToday = !!du.claims?.[today];
+  const streak = calcClaimStreak(du.claims);
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({title:du.title, emoji:du.emoji});
+  const [lockLine] = useState(()=>quip("dailyLocked"));
+  const [celebrate, setCelebrate] = useState(false);
+  const [claimLine, setClaimLine] = useState("");
+
+  // Announce the moment the last task gets checked (not on page load)
+  const prevUnlocked = useRef(status.unlocked);
+  useEffect(()=>{
+    if(status.unlocked && !prevUnlocked.current && !claimedToday && status.total>0){
+      onToast("🔓 "+quip("dailyUnlocked"));
+    }
+    prevUnlocked.current = status.unlocked;
+  },[status.unlocked]);
+
+  const green = "#22c55e";
+  const accent = claimedToday ? theme.muted : status.unlocked ? green : theme.accent;
+  const pct = status.total ? Math.round(status.done/status.total*100) : 100;
+  const remaining = status.items.filter(i=>!i.done);
+
+  const claim = () => {
+    const claims = {...(du.claims||{}), [today]:true};
+    const newStreak = calcClaimStreak(claims);
+    onSave({...du, claims, bestStreak:Math.max(du.bestStreak||0,newStreak)});
+    setClaimLine(quip("dailyClaimed"));
+    setCelebrate(true);
+  };
+  const undo = () => {
+    const claims = {...(du.claims||{})}; delete claims[today];
+    onSave({...du, claims});
+  };
+  const saveForm = () => {
+    onSave({...du, title:form.title.trim()||du.title, emoji:form.emoji.trim()||du.emoji});
+    setEditing(false);
+  };
+
+  const btn = {background:"none",border:`1px solid ${theme.border}`,borderRadius:6,color:theme.muted,cursor:"pointer",fontSize:"0.72rem",padding:"3px 8px"};
+
+  return(
+    <div style={{background:theme.panel,border:`1px solid ${status.unlocked&&!claimedToday?green:theme.border}`,borderRadius:10,padding:14,
+      boxShadow:status.unlocked&&!claimedToday?`0 0 24px ${green}33`:"none",transition:"box-shadow 0.4s, border-color 0.4s"}}>
+      <SectionHeader title="Daily Unlock" accent={accent} action={
+        <button onClick={()=>{setForm({title:du.title,emoji:du.emoji});setEditing(e=>!e);}} style={btn}>{editing?"Cancel":"Edit"}</button>
+      }/>
+
+      {editing ? (
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          <div style={{display:"flex",gap:8}}>
+            <input value={form.emoji} onChange={e=>setForm({...form,emoji:e.target.value})} maxLength={4}
+              style={{width:52,textAlign:"center",background:theme.bg,border:`1px solid ${theme.border}`,borderRadius:7,padding:"8px",color:theme.text,fontSize:"1.1rem"}}/>
+            <input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="What you're earning"
+              style={{flex:1,background:theme.bg,border:`1px solid ${theme.border}`,borderRadius:7,padding:"8px 10px",color:theme.text,fontSize:"0.85rem"}}/>
+          </div>
+          <div style={{fontSize:"0.68rem",color:theme.muted}}>Unlocks when every habit scheduled today and every to-do due today is checked off.</div>
+          <button onClick={saveForm} style={{background:theme.accent,border:"none",borderRadius:8,padding:"9px",color:"#000",fontWeight:700,cursor:"pointer",fontSize:"0.85rem"}}>Save</button>
+        </div>
+      ) : (
+        <>
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:10}}>
+            <div style={{fontSize:"2rem",lineHeight:1,filter:status.unlocked||claimedToday?"none":"grayscale(1)",opacity:status.unlocked||claimedToday?1:0.45,transition:"all 0.4s"}}>
+              {du.emoji}
+            </div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:"0.95rem",fontWeight:800,color:theme.text}}>{du.title}</div>
+              <div style={{fontSize:"0.72rem",color:accent,fontWeight:700,letterSpacing:"0.04em"}}>
+                {claimedToday ? "✓ CLAIMED TODAY" : status.unlocked ? "🔓 UNLOCKED" : `🔒 ${status.done}/${status.total} DONE`}
+              </div>
+            </div>
+            <div style={{textAlign:"right"}}>
+              <div style={{fontSize:"0.9rem",fontWeight:700,color:"#f97316"}}>🔥{streak}</div>
+              <div style={{fontSize:"0.58rem",color:theme.muted}}>best {Math.max(du.bestStreak||0,streak)}</div>
+            </div>
+          </div>
+
+          {!claimedToday && (
+            <div style={{height:6,background:theme.border,borderRadius:4,overflow:"hidden",marginBottom:10}}>
+              <div style={{height:"100%",width:pct+"%",background:status.unlocked?green:theme.accent,borderRadius:4,transition:"width 0.5s"}}/>
+            </div>
+          )}
+
+          {!status.unlocked && !claimedToday && (
+            <>
+              <div style={{fontSize:"0.75rem",color:theme.muted,fontStyle:"italic",marginBottom:8}}>{lockLine}</div>
+              <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                {remaining.map(i=>(
+                  <div key={i.kind+i.id} style={{display:"flex",alignItems:"center",gap:8,fontSize:"0.78rem",color:theme.text}}>
+                    <span style={{width:14,height:14,borderRadius:4,border:`1.5px solid ${theme.muted}`,flexShrink:0}}/>
+                    <span style={{flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{i.title}</span>
+                    <span style={{fontSize:"0.62rem",color:theme.muted,flexShrink:0}}>{i.kind==="todo"?"to-do":i.note||"habit"}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {status.unlocked && !claimedToday && (
+            <button onClick={claim} style={{width:"100%",background:green,border:"none",borderRadius:8,padding:"11px",color:"#000",fontWeight:800,cursor:"pointer",fontSize:"0.9rem"}}>
+              Claim {du.emoji} {du.title}
+            </button>
+          )}
+
+          {claimedToday && (
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+              <div style={{fontSize:"0.75rem",color:theme.muted}}>Earned. See you tomorrow.</div>
+              <button onClick={undo} style={btn}>Undo</button>
+            </div>
+          )}
+        </>
+      )}
+
+      {celebrate && (
+        <div onClick={()=>setCelebrate(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:4000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+          <div style={{background:theme.panel,border:`2px solid ${green}`,borderRadius:16,padding:"28px 24px",maxWidth:340,width:"100%",textAlign:"center",boxShadow:`0 0 60px ${green}44`}}>
+            <div style={{fontSize:"3rem",marginBottom:8}}>{du.emoji}</div>
+            <div style={{fontSize:"1.15rem",fontWeight:800,color:green,marginBottom:8}}>DAILY UNLOCK CLAIMED</div>
+            <div style={{fontSize:"0.88rem",color:theme.text,marginBottom:14,lineHeight:1.5}}>{claimLine}</div>
+            <div style={{fontSize:"0.75rem",color:theme.muted,marginBottom:16}}>🔥 {calcClaimStreak({...(du.claims||{}),[today]:true})}-day streak</div>
+            <button onClick={()=>setCelebrate(false)} style={{background:green,border:"none",borderRadius:8,padding:"10px 24px",color:"#000",fontWeight:800,cursor:"pointer",fontSize:"0.9rem"}}>Enjoy it</button>
+          </div>
         </div>
       )}
     </div>
@@ -2655,6 +2882,7 @@ function App(){
             settings:{...(saved.settings||DEFAULT_DATA.settings), trackingStartDate:saved.settings?.trackingStartDate||"2026-09-01"},
             rewardStore:saved.rewardStore||DEFAULT_DATA.rewardStore,
             goalRewards:saved.goalRewards||DEFAULT_DATA.goalRewards,
+            dailyUnlock:saved.dailyUnlock||DEFAULT_DATA.dailyUnlock,
             habits:migratedHabits,
           };
           if(!hasPilots||newHabits.length>0){
@@ -2696,7 +2924,7 @@ function App(){
       // streak
       const todayS=todayStr();
       const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
-      const yStr=yesterday.toISOString().slice(0,10);
+      const yStr=localDateStr(yesterday);
       const streak=r.lastActiveDate===todayS?r.currentStreak:r.lastActiveDate===yStr?(r.currentStreak||0)+1:1;
       const maxStreak=Math.max(r.maxStreak||0,streak);
       // time badges
@@ -2770,7 +2998,7 @@ function App(){
 
   const themeBase=THEMES[data.settings.theme]||THEMES.dark;
   const theme={...themeBase,accent:data.settings.accent||themeBase.accent};
-  const safeD={...data,projects:data.projects||[],notes:data.notes||[],habits:(data.habits||[]).map(h=>({...h,monthlyGoals:h.monthlyGoals||{}})),rewardStore:data.rewardStore||DEFAULT_DATA.rewardStore,goalRewards:data.goalRewards||DEFAULT_DATA.goalRewards};
+  const safeD={...data,projects:data.projects||[],notes:data.notes||[],habits:(data.habits||[]).map(h=>({...h,monthlyGoals:h.monthlyGoals||{}})),rewardStore:data.rewardStore||DEFAULT_DATA.rewardStore,goalRewards:data.goalRewards||DEFAULT_DATA.goalRewards,dailyUnlock:data.dailyUnlock||DEFAULT_DATA.dailyUnlock};
 
   return(
     <div style={{minHeight:"100vh",background:theme.bg,color:theme.text,fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",padding:"12px 16px",maxWidth:680,margin:"0 auto",boxSizing:"border-box"}}>
@@ -2815,6 +3043,14 @@ function App(){
 
       <div style={{display:"flex",flexDirection:"column",gap:12}}>
         <TodaySummary events={safeD.events} todos={safeD.todos} habits={safeD.habits} projects={safeD.projects} theme={theme}/>
+        <DailyUnlockPanel
+          habits={safeD.habits}
+          todos={safeD.todos}
+          dailyUnlock={safeD.dailyUnlock}
+          theme={theme}
+          onSave={du=>save({...safeD,dailyUnlock:du})}
+          onToast={showToast}
+        />
         <RewardsPanel rewards={safeD.rewards} theme={theme}/>
         <GoalRewardPanel
           habits={safeD.habits}
