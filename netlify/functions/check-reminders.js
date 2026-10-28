@@ -1,5 +1,5 @@
 // Netlify scheduled function — runs every 30 minutes
-// Reads upcoming events from JSONBin and fires ntfy notifications for imminent ones
+// Reads synced data from JSONBin and sends habit reminders (habits with a reminder time)
 
 const BIN_ID = process.env.JSONBIN_BIN_ID;
 const API_KEY = process.env.JSONBIN_API_KEY;
@@ -82,34 +82,8 @@ exports.handler = async (event) => {
 
   const notifications = [];
 
-  // Runs every 30 min, so each alert gets a 30-minute window: every event/todo
-  // lands in exactly one run per window, whatever minute it starts at.
-  const inWindow = (diff, lo, hi) => diff >= lo && diff < hi;
-  const minsLabel = m => (m <= 1 ? "now" : `in ${m} min`);
 
-  // Events today with a time: heads-up 30–59 min before, then a "soon" alert 0–29 min before
-  for (const ev of events) {
-    if (!ev.date || !ev.time || ev.date !== todayStr) continue;
-    const [eh, em] = ev.time.split(":").map(Number);
-    const diff = eh * 60 + em - nowMins;       // real minutes left (for the title)
-    const slotDiff = eh * 60 + em - slotMins;  // decides the window
-    if (inWindow(slotDiff, 30, 60)) {
-      notifications.push({
-        title: `⏰ ${ev.title} ${minsLabel(diff)}`,
-        message: `${ev.title} at ${formatTime(ev.time)}${ev.notes ? " — " + ev.notes : ""}`,
-        priority: "high",
-        tags: ["alarm_clock"],
-      });
-    } else if (inWindow(slotDiff, 0, 30)) {
-      notifications.push({
-        title: `🔔 ${ev.title} ${minsLabel(Math.max(diff, 0))}`,
-        message: `${ev.title} at ${formatTime(ev.time)}.${ev.notes ? " " + ev.notes : ""}`,
-        priority: "urgent",
-        tags: ["rotating_light"],
-      });
-    }
-  }
-
+  // (Events no longer get pushes beforehand — the 8pm check-in lists tomorrow's timed events.)
   // (To-dos no longer get push reminders.)
 
   // Habit reminders (e.g. Spanish plan)
