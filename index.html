@@ -2201,6 +2201,73 @@ function ProjectsPanel({projects,habits,theme,onSave,onDeleteProject,onMarkStepD
   );
 }
 
+// ─── BACKUP / RESTORE ───────────────────────────────────────────────────────
+// Everything the app saves lives in this browser's localStorage under "jarvis_*" keys.
+function buildBackup(){
+  const keys={};
+  try{ Object.keys(localStorage).filter(k=>k.startsWith("jarvis_")).forEach(k=>{ keys[k]=localStorage.getItem(k); }); }catch{}
+  return JSON.stringify({app:"gremlin-backup", version:1, exportedAt:new Date().toISOString(), keys});
+}
+function parseBackup(text){
+  const b=JSON.parse(String(text||"").trim());
+  if(b?.app!=="gremlin-backup"||!b.keys||!b.keys.jarvis_data_v7) throw new Error("That isn't a G.R.E.M.L.I.N. backup.");
+  const d=JSON.parse(b.keys.jarvis_data_v7);
+  return {b, summary:`${(d.habits||[]).length} habits, ${(d.events||[]).length} events, ${(d.todos||[]).length} to-dos, ${(d.notes||[]).length} notes · saved ${new Date(b.exportedAt).toLocaleString()}`};
+}
+function restoreBackup(b){
+  Object.entries(b.keys).forEach(([k,v])=>localStorage.setItem(k,v));
+}
+
+function BackupSection({theme}){
+  const [mode,setMode]=useState(null); // null | "restore"
+  const [text,setText]=useState("");
+  const [msg,setMsg]=useState("");
+  const btn={flex:1,background:"transparent",border:`1px solid ${theme.border}`,borderRadius:7,padding:"8px",color:theme.muted,cursor:"pointer",fontSize:"0.75rem"};
+  const copy=async()=>{
+    const data=buildBackup();
+    try{ await navigator.clipboard.writeText(data); setMsg("✅ Backup copied ("+Math.round(data.length/1024)+" KB). Paste it into a note in the Notes app to keep it safe."); }
+    catch{ setText(data); setMode("show"); setMsg("Couldn't copy automatically — select all the text below and copy it."); }
+  };
+  const saveFile=async()=>{
+    const data=buildBackup(), name="gremlin-backup-"+todayStr()+".json";
+    try{
+      const file=new File([data],name,{type:"application/json"});
+      if(navigator.canShare&&navigator.canShare({files:[file]})){ await navigator.share({files:[file],title:name}); setMsg("✅ Backup file shared. Choose \"Save to Files\" to keep it."); return; }
+    }catch(e){ if(e?.name==="AbortError") return; }
+    const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([data],{type:"application/json"})); a.download=name; a.click();
+    setMsg("✅ Backup file downloaded.");
+  };
+  const doRestore=()=>{
+    try{
+      const {b,summary}=parseBackup(text);
+      if(!window.confirm("Restore this backup? It replaces everything currently in the app.\n\n"+summary)) return;
+      restoreBackup(b); window.location.reload();
+    }catch(e){ setMsg("❌ "+(e.message||"Couldn't read that backup.")); }
+  };
+  const onFile=e=>{ const f=e.target.files?.[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ setText(String(r.result||"")); setMsg("File loaded — tap Restore."); }; r.readAsText(f); };
+  return(
+    <div style={{marginBottom:12}}>
+      <div style={{fontSize:"0.73rem",color:"#94a3b8",marginBottom:6}}>Backup</div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        <button onClick={copy} style={btn}>📋 Copy backup</button>
+        <button onClick={saveFile} style={btn}>💾 Save backup file</button>
+        <button onClick={()=>{setMode(m=>m==="restore"?null:"restore");setText("");setMsg("");}} style={btn}>♻️ Restore</button>
+      </div>
+      {(mode==="restore"||mode==="show")&&(
+        <div style={{marginTop:8}}>
+          <textarea value={text} onChange={e=>setText(e.target.value)} readOnly={mode==="show"} placeholder="Paste your backup here…"
+            style={{width:"100%",height:90,background:theme.bg,border:`1px solid ${theme.border}`,borderRadius:7,padding:8,color:theme.text,fontSize:"0.7rem",fontFamily:"monospace",boxSizing:"border-box"}}/>
+          {mode==="restore"&&<div style={{display:"flex",gap:8,marginTop:6,alignItems:"center"}}>
+            <label style={{...btn,textAlign:"center"}}>📂 Choose file<input type="file" accept=".json,application/json,text/plain" onChange={onFile} style={{display:"none"}}/></label>
+            <button onClick={doRestore} disabled={!text.trim()} style={{...btn,background:text.trim()?theme.accent:"transparent",color:text.trim()?"#000":theme.muted,fontWeight:700}}>Restore</button>
+          </div>}
+        </div>
+      )}
+      {msg&&<div style={{fontSize:"0.68rem",color:theme.muted,marginTop:6,lineHeight:1.4}}>{msg}</div>}
+    </div>
+  );
+}
+
 // ─── SETTINGS PANEL ───────────────────────────────────────────────────────────
 function SettingsPanel({settings,theme,onSave,onClose}){
   const [form,setForm]=useState({...settings});
@@ -2253,6 +2320,7 @@ function SettingsPanel({settings,theme,onSave,onClose}){
           </button>
         </div>
       </div>
+      <BackupSection theme={theme}/>
       <button onClick={()=>onSave(form)} style={{width:"100%",background:theme.accent,border:"none",borderRadius:8,padding:"10px",color:"#000",fontWeight:700,cursor:"pointer",fontSize:"0.9rem"}}>Save Settings</button>
     </div>
   );
