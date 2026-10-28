@@ -520,55 +520,171 @@ function fmtMins(m){ if(m<60)return`${m}m`; return m%60===0?`${m/60}h`:`${Math.f
 function timeAgo(ts){ const d=Date.now()-ts; if(d<60000)return"just now"; if(d<3600000)return`${Math.floor(d/60000)}m ago`; if(d<86400000)return`${Math.floor(d/3600000)}h ago`; return`${Math.floor(d/86400000)}d ago`; }
 
 // ─── CLINICAL SPANISH TRACK ───────────────────────────────────────────────────
-// From spanish-reminders-for-jarvis.json (Spanish project master plan).
+// "Spanish Plan — Simple Version" (v2). Weekdays Pimsleur, weekends Langua,
+// ~35 min a day. Progress = lesson counters + stage checkpoints, no deadline.
 // daysOfWeek uses JS numbering: Sun=0 … Sat=6.
 const SPANISH_TRACK = {
-  id:"spanish-clinical", name:"Clinical Spanish",
-  goal:"Conversational Spanish for pediatric patient visits",
+  id:"spanish-clinical", name:"Clinical Spanish", version:2,
+  goal:"Comfortable clinical Spanish with families · no deadline, ~35 min/day",
   tools:["Pimsleur","Langua"], startDate:"2026-10-27",
+  lessonsPerLevel:30, languaTotal:36,
+  minimumWeek:{ pimsleur:3, langua:1 },
   habits:[
-    {id:"pimsleur-daily", title:"Pimsleur lesson", daysOfWeek:[1,2,3,4,5,6], durationMin:30, xp:15, streakTracked:true,  reminderTime:"07:30",
-      detail:"One 30-min lesson, hands-free on the commute. Your core automaticity driver."},
-    {id:"mon-input",      title:"Input session", daysOfWeek:[1], durationMin:45, xp:30, streakTracked:false, reminderTime:"19:00",
-      detail:"A Langua conversation on the week's topic, or listening to slightly-hard material. Jot useful new words to recycle."},
-    {id:"tue-micro",      title:"Micro-drill: buy-time chunks", daysOfWeek:[2], durationMin:15, xp:10, streakTracked:false, reminderTime:"19:00",
-      detail:"Drill the 'buy-time' phrases out loud + yesterday's new words. 15 min."},
-    {id:"wed-output",     title:"Output session", daysOfWeek:[3], durationMin:45, xp:35, streakTracked:false, reminderTime:"19:00",
-      detail:"Langua clinical roleplay (sick visit / vaccine talk / worried parent) OR café en español with a coworker."},
-    {id:"thu-micro",      title:"Micro-drill: phrase bank", daysOfWeek:[4], durationMin:15, xp:10, streakTracked:false, reminderTime:"19:00",
-      detail:"One phrase-bank section aloud — cover the Spanish, produce it from memory. 15 min."},
-    {id:"fri-consolidate",title:"Consolidate session", daysOfWeek:[5], durationMin:45, xp:30, streakTracked:false, reminderTime:"19:00",
-      detail:"Review the week's Pimsleur lessons + write this phase's grammar as sentences about your real workday."},
-    {id:"sat-immersion",  title:"Immersion (fun)", daysOfWeek:[6], durationMin:25, xp:15, streakTracked:false, reminderTime:"10:00",
-      detail:"A show or podcast in Spanish, low pressure. Just enjoy it."},
-    {id:"cafe-espanol",   title:"Café en español", daysOfWeek:[2,4], durationMin:10, xp:20, streakTracked:true,  reminderTime:"12:00",
-      detail:"10 min of Spanish with a native-speaker coworker at lunch. Their only job: reformulate, don't correct."},
+    {id:"pimsleur-daily", kind:"pimsleur", title:"Pimsleur lesson + Voice Coach", daysOfWeek:[1,2,3,4,5], durationMin:35, reminderTime:"07:30",
+      detail:"Lesson audio (30 min) + Voice Coach for that lesson (5 min). Answer every prompt out loud. ~80% on time → next lesson; otherwise repeat it tomorrow. Repeating is progress."},
+    {id:"sat-langua", kind:"langua", title:"Langua lesson + Pimsleur Flash Cards", daysOfWeek:[6], durationMin:35, reminderTime:"10:00",
+      detail:"Langua lesson (20 min) + Pimsleur Flash Cards + Quick Match for this week's lessons (15 min). Save any word you'd actually use with a family."},
+    {id:"sun-langua", kind:"langua", title:"Langua lesson + saved flashcards", daysOfWeek:[0], durationMin:30, reminderTime:"10:00",
+      detail:"Langua lesson (20 min) + your saved Langua flashcards, or one phrase-bank section (10 min). Say everything out loud."},
   ],
-  fallbackRule:{ name:"Week-fell-apart minimum",
-    detail:"If the week collapses, the only non-negotiables are Pimsleur audio + one output session. Hitting both still counts as a 'week kept'.",
-    requiredHabitIds:["pimsleur-daily","wed-output"] },
-  // Plan milestones (marked by hand). Key stays "badges" for saved-data compatibility.
-  badges:[
-    {id:"m2-self-intro",      name:"Me Presento",           icon:"🙋", month:2, detail:"Deliver a smooth 2-minute self-introduction in Spanish."},
-    {id:"m4-first-convo",     name:"Primera Conversación",  icon:"💬", month:4, detail:"Hold a 15-minute Langua conversation with no English."},
-    {id:"m6-clinic-ready",    name:"Listo para la Clínica", icon:"🩺", month:6, detail:"Run a routine pediatric visit in Spanish and be understood."},
-    {id:"m9-conversational",  name:"Conversacional",        icon:"🗣️", month:9, detail:"Hold your own with a worried parent, improvising and recovering from missing words."},
+  stages:[
+    {stage:1, pimsleurLevel:1, langua:"Lessons 1–12",  languaEnd:12, checkpoint:"2-minute self-intro with no freezing"},
+    {stage:2, pimsleurLevel:2, langua:"Lessons 13–24", languaEnd:24, checkpoint:"Opening + history phrases (phrase bank) from memory"},
+    {stage:3, pimsleurLevel:3, langua:"Lessons 25–36", languaEnd:36, checkpoint:"10-min Langua conversation, no English"},
+    {stage:4, pimsleurLevel:4, langua:"Sat: clinical roleplay · Sun: Langua podcast", checkpoint:"Full sick-visit roleplay start to finish",
+      sat:{title:"Clinical roleplay + Pimsleur Flash Cards", detail:"Langua clinical roleplay — sick visit, vaccine talk, or worried parent (20 min) + Pimsleur Flash Cards + Quick Match for this week's lessons (15 min)."},
+      sun:{title:"Langua podcast + saved flashcards", detail:"A Langua podcast (20 min) + your saved flashcards or one phrase-bank section (10 min)."}},
+    {stage:5, pimsleurLevel:5, langua:"Sat: harder roleplay · Sun: Langua podcast", checkpoint:"Run a routine visit in Spanish and be understood",
+      sat:{title:"Harder roleplay + Pimsleur Flash Cards", detail:"A harder Langua clinical roleplay (20 min) + Pimsleur Flash Cards + Quick Match for this week's lessons (15 min)."},
+      sun:{title:"Langua podcast + saved flashcards", detail:"A Langua podcast (20 min) + your saved flashcards or one phrase-bank section (10 min)."}},
+  ],
+  // After the Stage 5 checkpoint: Pimsleur is finished; keep the weekends to maintain
+  maintain:{
+    sat:{title:"Clinical roleplay (maintenance)", detail:"Saturday Langua clinical roleplay to keep it sharp."},
+    sun:{title:"Langua podcast (maintenance)", detail:"Sunday Langua podcast to keep your ear tuned."}},
+  rules:[
+    "Weekdays = Pimsleur. One lesson a day, new or repeated.",
+    "Weekends = Langua. One lesson Saturday, one Sunday.",
+    "Speak out loud every time. Never answer silently.",
+  ],
+  notes:[
+    "Move on or repeat? ~80% of audio prompts on time → next lesson. If not, repeat it tomorrow.",
+    "Going back is fine. Redo earlier lessons or a whole level; the daily time stays the same, the finish line moves.",
+    "Missed a day? Don't double up. Do the next lesson the next day and let the schedule slide.",
+    "Bad week minimum: 3 Pimsleur lessons + 1 Langua lesson.",
+    "Move to the next stage when you pass the checkpoint, not when the calendar says so (~6 weeks per level without repeats).",
+  ],
+  optional:[
+    "Pimsleur Mini in place of a lesson when you're tired (15 min)",
+    "Pimsleur Free Practice on a lesson you had to repeat",
+    "Pimsleur Reading, if you want it",
+    "Langua podcasts while driving or doing chores (Basic–Level 2, Intermediate after)",
+    "Coworker practice: 10 min of Spanish; ask them to say it back the natural way, not correct you",
+  ],
+  safety:"For consent, bad news, or complex histories, use a professional interpreter even as your Spanish gets strong. This plan covers routine visits.",
+  phraseBank:[
+    {section:"Opening", rows:[
+      ["Hi, I'm Dr. ___.","Hola, soy el doctor ___."],
+      ["What brings you in today?","¿Qué los trae hoy?"],
+      ["What's your child's name?","¿Cómo se llama su hijo/hija?"],
+      ["How old is he/she?","¿Cuántos años tiene? / ¿Cuántos meses tiene?"],
+      ["(child) Can you show me where it hurts?","¿Me enseñas dónde te duele?"],
+      ["(child) You're doing great.","Lo estás haciendo muy bien."]]},
+    {section:"History", rows:[
+      ["When did it start?","¿Cuándo empezó?"],
+      ["Has he/she had a fever?","¿Ha tenido fiebre?"],
+      ["How high, and for how long?","¿Qué tan alta, y por cuánto tiempo?"],
+      ["Is he/she eating and drinking normally?","¿Está comiendo y bebiendo normalmente?"],
+      ["Wetting diapers / urinating as usual?","¿Está mojando pañales / orinando como siempre?"],
+      ["Has he/she vomited? How many times?","¿Ha vomitado? ¿Cuántas veces?"],
+      ["Is he/she having trouble breathing?","¿Le cuesta respirar?"],
+      ["Taking any medication?","¿Está tomando algún medicamento?"],
+      ["Allergic to anything?","¿Es alérgico/alérgica a algo?"],
+      ["Up to date on vaccines?","¿Está al día con las vacunas?"],
+      ["Anyone else at home sick?","¿Alguien más en casa ha estado enfermo?"]]},
+    {section:"Exam", rows:[
+      ["I'm going to check his/her ears.","Voy a revisarle los oídos."],
+      ["I'm going to listen to his/her chest.","Voy a escucharle el pecho."],
+      ["(child) Open your mouth, please.","Abre la boca, por favor."],
+      ["(child) Take a deep breath.","Respira hondo."],
+      ["(child) Does it hurt here?","¿Te duele aquí?"],
+      ["This might feel a little cold.","Esto se va a sentir un poco frío."]]},
+    {section:"Plan", rows:[
+      ["It's an ear infection.","Es una infección de oído."],
+      ["It's a virus—it doesn't need antibiotics.","Es un virus, no necesita antibióticos."],
+      ["I'm going to prescribe an antibiotic.","Le voy a recetar un antibiótico."],
+      ["Give this medicine every 8 hours.","Déle este medicamento cada 8 horas."],
+      ["Make sure he/she drinks plenty of fluids.","Asegúrese de que tome muchos líquidos."],
+      ["Give the full course, even if he/she feels better.","Déle todo el tratamiento, aunque se sienta mejor."]]},
+    {section:"Return precautions", rows:[
+      ["If the fever doesn't go down in ___ days, bring him/her back.","Si la fiebre no baja en ___ días, tráigalo/tráigala de nuevo."],
+      ["If he/she has trouble breathing, go to the ER.","Si le cuesta respirar, vaya a emergencias."],
+      ["Call us if it gets worse.","Llámenos si empeora."]]},
+    {section:"Closing", rows:[
+      ["I know it's worrying, but he/she is going to be okay.","Sé que es preocupante, pero va a estar bien."],
+      ["You did the right thing bringing him/her in.","Hizo bien en traerlo/traerla."],
+      ["Do you have any questions?","¿Tiene alguna pregunta?"]]},
+    {section:"Buy-time phrases", rows:[
+      ["Let me explain…","Déjeme explicarle…"],
+      ["What I mean is…","Lo que quiero decir es…"],
+      ["Sorry, could you repeat that?","Perdón, ¿me lo puede repetir?"],
+      ["Can you say that more slowly?","¿Me lo puede decir más despacio?"],
+      ["One moment, please.","Un momento, por favor."],
+      ["It's like…","Es como…"]]},
   ],
 };
+const SPANISH_DEFAULT_PROGRESS={ pimsleurLevel:1, pimsleurLesson:1, languaLesson:1, stage:1 };
+function spanishProgress(st){ return {...SPANISH_DEFAULT_PROGRESS, ...(st?.progress||{})}; }
+function spanishStageInfo(stage){ return SPANISH_TRACK.stages.find(s=>s.stage===stage)||null; } // null = maintenance (past stage 5)
 
-// One-time install of the Spanish track into the habit list.
-// Converts the old "Pimsleur Spanish" habit instead of duplicating it.
+// Weekend habit titles follow the stage; after Stage 5, weekday Pimsleur is retired (history kept)
+function applySpanishStage(habits, stage){
+  const info=spanishStageInfo(stage), base=Object.fromEntries(SPANISH_TRACK.habits.map(h=>[h.id,h]));
+  const sat=info?(info.sat||base["sat-langua"]):SPANISH_TRACK.maintain.sat;
+  const sun=info?(info.sun||base["sun-langua"]):SPANISH_TRACK.maintain.sun;
+  return (habits||[]).map(h=>{
+    if(h.id==="sat-langua") return {...h, title:sat.title, detail:sat.detail};
+    if(h.id==="sun-langua") return {...h, title:sun.title, detail:sun.detail};
+    if(h.id==="pimsleur-daily") return {...h, daysOfWeek: info?base["pimsleur-daily"].daysOfWeek:[]};
+    return h;
+  });
+}
+
+function spanishProjectSteps(stage, checkpoints){
+  return SPANISH_TRACK.stages.map(s=>({
+    id:"spanish-stage-"+s.stage, stage:s.stage,
+    title:`Stage ${s.stage} — Pimsleur Level ${s.pimsleurLevel} · ${s.checkpoint}`,
+    notes:`Langua: ${s.langua}. Checkpoint before moving on: ${s.checkpoint}.`,
+    done: s.stage<stage, doneDate: checkpoints?.[s.stage]||null,
+  }));
+}
+
+// Install / upgrade the Spanish track. Keeps Pimsleur check-off history; removes
+// habits from the old plan; turns the Spanish project's steps into the 5 stages.
 function installSpanishTrack(data){
-  if(data.spanishTrack?.installed) return data;
-  let habits=[...(data.habits||[])];
+  const st=data.spanishTrack||{};
+  if(st.installed && (st.version||1)>=SPANISH_TRACK.version) return data;
+  const keep=new Set(SPANISH_TRACK.habits.map(h=>h.id));
+  let habits=(data.habits||[]).filter(h=>h.track!==SPANISH_TRACK.id || keep.has(h.id));
   SPANISH_TRACK.habits.forEach(ph=>{
-    const fields={...ph, frequency:"weekly", weeklyTarget:null, startDate:SPANISH_TRACK.startDate, track:SPANISH_TRACK.id};
+    const {kind, ...rest}=ph;
+    const fields={...rest, kind, frequency:"weekly", weeklyTarget:null, startDate:SPANISH_TRACK.startDate, track:SPANISH_TRACK.id};
     let idx=habits.findIndex(h=>h.id===ph.id);
     if(idx<0 && ph.id==="pimsleur-daily") idx=habits.findIndex(h=>/pimsleur/i.test(h.title||""));
-    if(idx>=0) habits[idx]={...habits[idx], ...fields, completions:habits[idx].completions||{}, monthlyGoals:habits[idx].monthlyGoals||{}};
+    if(idx>=0){ const {xp, streakTracked, ...old}=habits[idx]; habits[idx]={...old, ...fields, completions:old.completions||{}, monthlyGoals:old.monthlyGoals||{}}; }
     else habits.push({...fields, completions:{}, monthlyGoals:{}});
   });
-  return {...data, habits, spanishTrack:{installed:true, badges:{}, ...(data.spanishTrack||{}), installedAt:todayStr()}};
+  const progress=spanishProgress(st), checkpoints=st.checkpoints||{};
+  habits=applySpanishStage(habits, progress.stage);
+  const projects=(data.projects||[]).map(p=>!/spanish/i.test(p.title||"")?p:{
+    ...p, type:"linear", track:SPANISH_TRACK.id,
+    description:"Comfortable clinical Spanish with families. No deadline. Pimsleur Levels 1–5 on weekdays + Langua on weekends, ~35 min a day. Move to the next stage when you pass its checkpoint.",
+    steps:spanishProjectSteps(progress.stage, checkpoints),
+  });
+  const {badges, ...restSt}=st;
+  return {...data, habits, projects, spanishTrack:{...restSt, installed:true, version:SPANISH_TRACK.version, progress, checkpoints, installedAt:st.installedAt||todayStr()}};
+}
+
+// Pass the current stage's checkpoint → next stage (pure; used by the card and the project step)
+function spanishAdvanceStage(data){
+  const st=data.spanishTrack||{}, pr=spanishProgress(st);
+  if(pr.stage>SPANISH_TRACK.stages.length) return data;
+  const today=todayStr(), checkpoints={...(st.checkpoints||{}), [pr.stage]:today};
+  const stage=pr.stage+1;
+  const progress={...pr, stage, pimsleurLevel:Math.min(stage,5), pimsleurLesson:stage<=5?1:pr.pimsleurLesson};
+  const habits=applySpanishStage(data.habits, stage);
+  const projects=(data.projects||[]).map(p=>p.track!==SPANISH_TRACK.id?p:{...p, lastProgressDate:today, steps:spanishProjectSteps(stage, checkpoints)});
+  return {...data, habits, projects, spanishTrack:{...st, progress, checkpoints}};
 }
 
 function normTitle(t){ return String(t||"").trim().toLowerCase(); }
@@ -621,23 +737,26 @@ function habitBestStreak(h){
   return best;
 }
 
-// Status of one Mon–Sun week of the track
+// Status of one Mon–Sun week of the track.
+// Minimum = 3 Pimsleur + 1 Langua (capped at what's actually scheduled that week).
 function spanishWeekStatus(habits, weekKey){
   const th=trackHabits(habits), today=todayStr();
   const days=weekDates(weekKey).map(ds=>({
     ds,
-    items:th.filter(h=>isHabitScheduled(h,ds)).map(h=>({id:h.id,title:h.title,done:!!h.completions?.[ds]})),
+    items:th.filter(h=>isHabitScheduled(h,ds)).map(h=>({id:h.id,title:h.title,kind:h.kind||(h.id==="pimsleur-daily"?"pimsleur":"langua"),done:!!h.completions?.[ds]})),
   }));
   const all=days.flatMap(d=>d.items.map(i=>({...i,ds:d.ds})));
   const total=all.length, done=all.filter(i=>i.done).length;
-  const req=SPANISH_TRACK.fallbackRule.requiredHabitIds;
-  const reqItems=all.filter(i=>req.includes(i.id));
+  const count=(kind,f)=>all.filter(i=>i.kind===kind&&f(i)).length;
+  const need={ pimsleur:Math.min(SPANISH_TRACK.minimumWeek.pimsleur, count("pimsleur",()=>true)),
+               langua:Math.min(SPANISH_TRACK.minimumWeek.langua, count("langua",()=>true)) };
+  const got={ pimsleur:count("pimsleur",i=>i.done), langua:count("langua",i=>i.done) };
+  const open={ pimsleur:count("pimsleur",i=>!i.done&&i.ds>=today), langua:count("langua",i=>!i.done&&i.ds>=today) };
   const fullKept = total>0 && done===total;
-  const minimumKept = reqItems.length>0 && reqItems.every(i=>i.done);
+  const minimumKept = total>0 && got.pimsleur>=need.pimsleur && got.langua>=need.langua;
   const over = addDaysStr(weekKey,6) < today;
-  // can the minimum still be hit? (no required item missed on a past day)
-  const minimumAlive = reqItems.every(i=>i.done || i.ds>=today);
-  return {days,total,done,fullKept,minimumKept,minimumAlive,over};
+  const minimumAlive = got.pimsleur+open.pimsleur>=need.pimsleur && got.langua+open.langua>=need.langua;
+  return {days,total,done,fullKept,minimumKept,minimumAlive,over,need,got};
 }
 
 function spanishWeeksKept(habits){
@@ -651,10 +770,6 @@ function spanishWeeksKept(habits){
     wk=addDaysStr(wk,7);
   }
   return {kept,full};
-}
-
-function milestoneTargetDate(months){
-  const d=new Date(SPANISH_TRACK.startDate+"T12:00:00"); d.setMonth(d.getMonth()+months); return localDateStr(d);
 }
 
 // Therapy moved to every other week starting 2026-10-27 (2:00 PM)
@@ -2149,13 +2264,14 @@ function buildSystemPrompt(data, weatherRef){
       return "DAILY UNLOCK ("+du.title+"): "+(du.claims?.[todayStr()]?"claimed today":st.unlocked?"unlocked, not yet claimed":"locked, "+st.done+"/"+st.total+" done; still needed: "+st.items.filter(i=>!i.done).map(i=>i.title).join(", "))+"; claim streak "+calcClaimStreak(du.claims)+" days"; })(),
     (()=>{ const th=trackHabits(data.habits); if(!th.length) return "";
       const wk=spanishWeekStatus(data.habits,getCurrentWeekKey()); const pim=th.find(h=>h.id==="pimsleur-daily");
+      const pr=spanishProgress(data.spanishTrack), info=spanishStageInfo(pr.stage);
       const todayList=th.filter(h=>isHabitScheduled(h,todayS)).map(h=>(h.completions?.[todayS]?"[DONE] ":"[    ] ")+h.title+" ("+h.durationMin+"m, "+formatTime(h.reminderTime)+")");
-      const got=Object.keys(data.spanishTrack?.badges||{}).map(id=>SPANISH_TRACK.badges.find(b=>b.id===id)?.name).filter(Boolean);
-      return "SPANISH PLAN (Clinical Spanish for pediatric visits, Pimsleur + Langua, started "+formatDate(SPANISH_TRACK.startDate)+"): today: "+(todayList.join(" | ")||"rest day")
+      return "SPANISH PLAN (simple version; comfortable clinical Spanish with families, no deadline, ~35 min/day, never over 40; started "+formatDate(SPANISH_TRACK.startDate)+"): "
+        +(info?"Stage "+pr.stage+"/5 — Pimsleur Level "+pr.pimsleurLevel+" Lesson "+pr.pimsleurLesson+"/"+SPANISH_TRACK.lessonsPerLevel+", Langua lesson "+Math.min(pr.languaLesson,SPANISH_TRACK.languaTotal)+"/"+SPANISH_TRACK.languaTotal+"; checkpoint to pass: "+info.checkpoint:"all 5 stages passed, maintenance mode (Sat roleplay + Sun podcast)")
+        +"; today: "+(todayList.join(" | ")||"nothing scheduled")
         +"; this week "+wk.done+"/"+wk.total+(wk.fullKept?" (full week kept)":wk.minimumKept?" (minimum kept)":"")
-        +"; minimum rule: Pimsleur every scheduled day + Wednesday output session; Pimsleur streak "+(pim?habitStreak(pim):0)
-        +"; milestones reached: "+(got.join(", ")||"none yet")
-        +". Weekly rhythm: Pimsleur Mon-Sat 7:30am; Mon input, Tue drill, Wed output, Thu drill, Fri consolidate at 7pm; Sat immersion 10am; café en español Tue/Thu noon."; })(),
+        +"; bad-week minimum: 3 Pimsleur + 1 Langua; Pimsleur streak "+(pim?habitStreak(pim):0)
+        +". Rules: weekdays Pimsleur lesson audio + Voice Coach (7:30am), Sat Langua lesson + Pimsleur Flash Cards/Quick Match, Sun Langua lesson + saved flashcards or phrase bank (10am); speak out loud; ~80% on time → next lesson, else repeat; missed a day → don't double up. For consent, bad news or complex histories he should use a professional interpreter."; })(),
     weatherRef?"WEATHER: "+weatherRef:"",
     "",
     "TONY CONTEXT: Pediatrician at Woodcreek (4 days/wk). Plays for the Pilots baseball team. Tuesday run club. Rock climbs, lifts. Learning Spanish. ADHD. DIY car soundproofing (2024 Civic Sport Touring). Fantasy football, gaming, Seinfeld, Dungeon Crawler Carl. University Place WA.",
@@ -2375,31 +2491,60 @@ function GoalRewardPanel({habits, goalRewards, startDate, theme, onSave, onCeleb
 }
 
 // ─── CLINICAL SPANISH PANEL ──────────────────────────────────────────────────
-function SpanishPanel({habits, spanishTrack, theme, onClaimMilestone}){
+function SpanishPanel({habits, spanishTrack, theme, onSetProgress, onPassCheckpoint}){
   const [show,setShow]=useState(true);
-  const [confirming,setConfirming]=useState(null);
-  const [openBadges,setOpenBadges]=useState(false);
+  const [confirming,setConfirming]=useState(false);
+  const [open,setOpen]=useState(null); // "plan" | "phrases" | null
+  const [section,setSection]=useState(0);
+  const [revealed,setRevealed]=useState({});
+  const [revealAll,setRevealAll]=useState(false);
   const today=todayStr();
   const started=today>=SPANISH_TRACK.startDate;
-  const wk=getCurrentWeekKey();
-  const week=spanishWeekStatus(habits, wk);
+  const week=spanishWeekStatus(habits, getCurrentWeekKey());
   const th=trackHabits(habits);
   const pim=th.find(h=>h.id==="pimsleur-daily");
-  const cafe=th.find(h=>h.id==="cafe-espanol");
   const {kept}=spanishWeeksKept(habits);
-  const earned=spanishTrack?.badges||{};
-  const milestones=SPANISH_TRACK.badges.filter(b=>b.month);
+  const pr=spanishProgress(spanishTrack);
+  const info=spanishStageInfo(pr.stage); // null = maintenance
+  const N=SPANISH_TRACK.lessonsPerLevel, LT=SPANISH_TRACK.languaTotal;
   const todayItems=th.filter(h=>isHabitScheduled(h,today));
   const red="#ef4444", green="#22c55e", amber="#f59e0b";
   const btn={background:"none",border:`1px solid ${theme.border}`,borderRadius:6,color:theme.muted,cursor:"pointer",fontSize:"0.72rem",padding:"3px 8px"};
+  const btnOn={...btn,background:amber,color:"#000",border:"none",fontWeight:700};
+  const label={fontSize:"0.62rem",color:theme.muted,textTransform:"uppercase",letterSpacing:"0.08em"};
+  const row={display:"flex",alignItems:"center",gap:8,padding:"7px 8px",background:theme.bg,borderRadius:7};
   if(!th.length) return null;
 
+  // Pimsleur counter (level can be redone below the current stage; can't pass the stage's level without its checkpoint)
+  const pimDone=!info;
+  const atLevelEnd=pr.pimsleurLesson>=N && pr.pimsleurLevel>=Math.min(pr.stage,5);
+  const pimNext=()=>{ if(pr.pimsleurLesson<N) onSetProgress({pimsleurLesson:pr.pimsleurLesson+1});
+    else if(pr.pimsleurLevel<Math.min(pr.stage,5)) onSetProgress({pimsleurLevel:pr.pimsleurLevel+1,pimsleurLesson:1}); };
+  const pimBack=()=>{ if(pr.pimsleurLesson>1) onSetProgress({pimsleurLesson:pr.pimsleurLesson-1});
+    else if(pr.pimsleurLevel>1) onSetProgress({pimsleurLevel:pr.pimsleurLevel-1,pimsleurLesson:N}); };
+  const languaAllDone=pr.languaLesson>LT;
+  const languaAhead=info?.languaEnd && pr.languaLesson>info.languaEnd;
+
   let weekLine, weekColor;
+  const minText=`Minimum: Pimsleur ${week.got.pimsleur}/${week.need.pimsleur} · Langua ${week.got.langua}/${week.need.langua}`;
   if(!started){ weekLine="Starts "+new Date(SPANISH_TRACK.startDate+"T12:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"}); weekColor=theme.muted; }
   else if(week.fullKept){ weekLine="Full week kept"; weekColor=green; }
   else if(week.minimumKept){ weekLine="Minimum kept · rest is bonus"; weekColor=amber; }
-  else if(week.minimumAlive){ weekLine="Minimum: Pimsleur every day + Wed output"; weekColor=theme.muted; }
-  else { weekLine="Minimum missed this week"; weekColor=red; }
+  else if(week.minimumAlive){ weekLine=minText; weekColor=theme.muted; }
+  else { weekLine="Minimum missed this week — don't double up, just do the next lesson"; weekColor=red; }
+
+  const stepper=(text,sub,onBack,onNext,nextLabel,nextDisabled)=>(
+    <div style={{...row,marginBottom:5}}>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:"0.82rem",fontWeight:700,color:theme.text}}>{text}</div>
+        {sub&&<div style={{fontSize:"0.64rem",color:theme.muted,lineHeight:1.35,marginTop:1}}>{sub}</div>}
+      </div>
+      {onBack&&<button onClick={onBack} style={btn} title="Go back">−</button>}
+      {onNext&&<button onClick={onNext} disabled={nextDisabled} style={{...btn,opacity:nextDisabled?0.4:1,cursor:nextDisabled?"default":"pointer",color:nextDisabled?theme.muted:amber,borderColor:nextDisabled?theme.border:amber}}>{nextLabel}</button>}
+    </div>
+  );
+
+  const pb=SPANISH_TRACK.phraseBank[section];
 
   return(
     <div style={{background:theme.panel,border:`1px solid ${theme.border}`,borderRadius:10,padding:14}}>
@@ -2410,7 +2555,7 @@ function SpanishPanel({habits, spanishTrack, theme, onClaimMilestone}){
 
       {/* Stats row */}
       <div style={{display:"flex",gap:8,marginBottom:10}}>
-        {[["Pimsleur",pim?habitStreak(pim):0,"🔥"],["Café",cafe?habitStreak(cafe):0,"☕"],["Weeks kept",kept,"✅"],["This week",week.done+"/"+week.total,"📅"]].map(([l,v,i])=>(
+        {[["Stage",info?pr.stage+"/5":"Done","🧭"],["Pimsleur",pim?habitStreak(pim):0,"🔥"],["Weeks kept",kept,"✅"],["This week",week.done+"/"+week.total,"📅"]].map(([l,v,i])=>(
           <div key={l} style={{flex:1,background:theme.bg,borderRadius:7,padding:"6px 4px",textAlign:"center"}}>
             <div style={{fontSize:"0.9rem",fontWeight:700,color:theme.text}}>{i}{v}</div>
             <div style={{fontSize:"0.58rem",color:theme.muted}}>{l}</div>
@@ -2419,6 +2564,35 @@ function SpanishPanel({habits, spanishTrack, theme, onClaimMilestone}){
       </div>
 
       {show && <>
+        {/* Where you are */}
+        <div style={{...label,marginBottom:5}}>Where you are</div>
+        {pimDone
+          ? stepper("Pimsleur · all 5 levels done", "Maintenance: Saturday roleplay + Sunday podcast.")
+          : stepper(`Pimsleur · Level ${pr.pimsleurLevel}, Lesson ${pr.pimsleurLesson}/${N}`,
+              atLevelEnd ? "Level done. Pass the checkpoint below to move on, or redo lessons with −."
+                         : "After each lesson: ~80% on time → Next. Otherwise repeat it tomorrow.",
+              (pr.pimsleurLesson>1||pr.pimsleurLevel>1)?pimBack:null, pimNext, "Next ›", atLevelEnd)}
+        {info && pr.stage<=3
+          ? stepper(languaAllDone?`Langua · all ${LT} lessons done`:`Langua · Lesson ${pr.languaLesson}/${LT}`,
+              languaAhead ? "Ahead of Pimsleur. Weekends: redo Langua lessons, free conversation, or a Langua podcast until Pimsleur catches up."
+                          : `This stage: ${info.langua}. Save any word you'd use with a family.`,
+              pr.languaLesson>1?()=>onSetProgress({languaLesson:pr.languaLesson-1}):null,
+              ()=>onSetProgress({languaLesson:pr.languaLesson+1}), "Done ›", languaAllDone)
+          : info && stepper("Weekends", info.langua)}
+        {info && (
+          <div style={{...row,marginBottom:10,border:`1px solid ${amber}44`}}>
+            <span style={{fontSize:"1.1rem"}}>🧭</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:"0.66rem",color:amber,fontWeight:700}}>STAGE {pr.stage} CHECKPOINT</div>
+              <div style={{fontSize:"0.78rem",color:theme.text,lineHeight:1.35}}>{info.checkpoint}</div>
+            </div>
+            {confirming
+              ? <><button onClick={()=>{onPassCheckpoint(pr.stage);setConfirming(false);}} style={btnOn}>Confirm</button>
+                  <button onClick={()=>setConfirming(false)} style={btn}>✕</button></>
+              : <button onClick={()=>setConfirming(true)} style={btn}>Passed</button>}
+          </div>
+        )}
+
         {/* Week strip */}
         <div style={{display:"flex",gap:4,marginBottom:6}}>
           {week.days.map((d,i)=>{
@@ -2428,7 +2602,7 @@ function SpanishPanel({habits, spanishTrack, theme, onClaimMilestone}){
                 <div style={{fontSize:"0.58rem",color:isToday?amber:theme.muted,fontWeight:isToday?700:400}}>{["M","T","W","T","F","S","S"][i]}</div>
                 <div style={{display:"flex",flexWrap:"wrap",justifyContent:"center",gap:2,marginTop:3,minHeight:8}}>
                   {d.items.map(it=>(
-                    <span key={it.id} title={it.title} style={{width:7,height:7,borderRadius:"50%",background:it.done?green:past?red:theme.border}}/>
+                    <span key={it.id} title={it.title} style={{width:7,height:7,borderRadius:"50%",background:it.done?green:past&&d.ds>=SPANISH_TRACK.startDate?red:theme.border}}/>
                   ))}
                 </div>
               </div>
@@ -2440,47 +2614,74 @@ function SpanishPanel({habits, spanishTrack, theme, onClaimMilestone}){
         {/* Today */}
         {started && (
           <div style={{marginBottom:10}}>
-            <div style={{fontSize:"0.62rem",color:theme.muted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Today</div>
+            <div style={{...label,marginBottom:4}}>Today</div>
             {todayItems.length===0
-              ? <div style={{fontSize:"0.78rem",color:theme.muted}}>Rest day. Even gremlins sleep. (We don't.)</div>
+              ? <div style={{fontSize:"0.78rem",color:theme.muted}}>Nothing scheduled. Even gremlins sleep. (We don't.)</div>
               : todayItems.map(h=>(
                 <div key={h.id} style={{display:"flex",alignItems:"center",gap:8,fontSize:"0.78rem",color:theme.text,padding:"2px 0"}}>
                   <span style={{color:h.completions?.[today]?green:theme.muted}}>{h.completions?.[today]?"✓":"○"}</span>
                   <span style={{flex:1,textDecoration:h.completions?.[today]?"line-through":"none",opacity:h.completions?.[today]?0.6:1}}>{h.title}</span>
-                  <span style={{fontSize:"0.62rem",color:theme.muted}}>{formatTime(h.reminderTime)}</span>
+                  <span style={{fontSize:"0.62rem",color:theme.muted}}>{h.durationMin?fmtMins(h.durationMin)+" · ":""}{formatTime(h.reminderTime)}</span>
                 </div>
               ))}
-            {todayItems.length>0&&<div style={{fontSize:"0.6rem",color:theme.muted,marginTop:3}}>Check these off in Daily Habits.</div>}
+            {todayItems.length>0&&<div style={{fontSize:"0.6rem",color:theme.muted,marginTop:3}}>Check these off in Daily Habits. Speak out loud every time.</div>}
           </div>
         )}
 
-        {/* Badges */}
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-          <div style={{fontSize:"0.62rem",color:theme.muted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Milestones · {milestones.filter(b=>earned[b.id]).length}/{milestones.length}</div>
-          <button onClick={()=>setOpenBadges(o=>!o)} style={btn}>{openBadges?"Hide":"Show"}</button>
+        {/* Plan + phrase bank toggles */}
+        <div style={{display:"flex",gap:6,marginBottom:open?8:0}}>
+          <button onClick={()=>setOpen(o=>o==="plan"?null:"plan")} style={open==="plan"?btnOn:btn}>📋 Plan & rules</button>
+          <button onClick={()=>setOpen(o=>o==="phrases"?null:"phrases")} style={open==="phrases"?btnOn:btn}>🗣️ Phrase bank</button>
         </div>
-        {openBadges && (
-          <div style={{display:"flex",flexDirection:"column",gap:5}}>
-            {milestones.map(b=>{
-              const got=earned[b.id];
+
+        {open==="plan" && (
+          <div style={{fontSize:"0.72rem",color:theme.text,lineHeight:1.45}}>
+            <div style={{...label,margin:"4px 0"}}>The 3 rules</div>
+            {SPANISH_TRACK.rules.map((r,i)=><div key={i}><b style={{color:amber}}>{i+1}.</b> {r}</div>)}
+            <div style={{...label,margin:"8px 0 4px"}}>Good to know</div>
+            {SPANISH_TRACK.notes.map((n,i)=><div key={i} style={{color:theme.muted,marginBottom:2}}>• {n}</div>)}
+            <div style={{...label,margin:"8px 0 4px"}}>Roadmap</div>
+            {SPANISH_TRACK.stages.map(s=>{
+              const passed=spanishTrack?.checkpoints?.[s.stage], cur=s.stage===pr.stage;
               return(
-                <div key={b.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 8px",background:theme.bg,borderRadius:7,opacity:got?1:0.85}}>
-                  <span style={{fontSize:"1.2rem",filter:got?"none":"grayscale(1)",opacity:got?1:0.5}}>{b.icon}</span>
+                <div key={s.stage} style={{...row,marginBottom:4,border:`1px solid ${cur?amber+"66":"transparent"}`,opacity:passed?0.65:1}}>
+                  <span style={{color:passed?green:cur?amber:theme.muted,fontWeight:700,width:16}}>{passed?"✓":s.stage}</span>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:"0.8rem",fontWeight:700,color:got?amber:theme.text}}>{b.name}</div>
-                    <div style={{fontSize:"0.66rem",color:theme.muted,lineHeight:1.35}}>
-                      {b.month?`Month ${b.month} (~${formatDate(milestoneTargetDate(b.month))}): `:""}{b.detail}
-                    </div>
-                    {got&&<div style={{fontSize:"0.6rem",color:green,marginTop:2}}>Reached {formatDate(got)}</div>}
+                    <div style={{fontSize:"0.74rem",color:theme.text}}>Pimsleur Level {s.pimsleurLevel} · {s.langua}</div>
+                    <div style={{fontSize:"0.64rem",color:theme.muted}}>Checkpoint: {s.checkpoint}{passed?" · passed "+formatDate(passed):""}</div>
                   </div>
-                  {!got && b.month && (
-                    confirming===b.id
-                      ? <button onClick={()=>{onClaimMilestone(b);setConfirming(null);}} style={{...btn,background:amber,color:"#000",border:"none",fontWeight:700}}>Confirm</button>
-                      : <button onClick={()=>setConfirming(b.id)} style={btn}>I did it</button>
-                  )}
                 </div>
               );
             })}
+            <div style={{color:theme.muted,fontSize:"0.66rem",marginBottom:6}}>After Level 5: keep the Saturday roleplay + Sunday podcast to maintain.</div>
+            <div style={{...label,margin:"8px 0 4px"}}>Optional extras (don't count toward the 35 min)</div>
+            {SPANISH_TRACK.optional.map((o,i)=><div key={i} style={{color:theme.muted,marginBottom:2}}>• {o}</div>)}
+            <div style={{marginTop:8,padding:"6px 8px",borderRadius:6,background:`${red}14`,border:`1px solid ${red}44`,color:theme.text,fontSize:"0.68rem"}}>⚠️ {SPANISH_TRACK.safety}</div>
+          </div>
+        )}
+
+        {open==="phrases" && (
+          <div>
+            <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:6}}>
+              {SPANISH_TRACK.phraseBank.map((p,i)=>(
+                <button key={p.section} onClick={()=>{setSection(i);setRevealed({});setRevealAll(false);}} style={i===section?{...btnOn,fontSize:"0.68rem"}:{...btn,fontSize:"0.68rem"}}>{p.section}</button>
+              ))}
+            </div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+              <div style={{fontSize:"0.64rem",color:theme.muted}}>Say it from the English, then tap to check. <b>Usted</b> with parents, <b>tú</b> with the child.</div>
+              <button onClick={()=>{setRevealAll(r=>!r);setRevealed({});}} style={{...btn,flexShrink:0}}>{revealAll?"Hide all":"Show all"}</button>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:4}}>
+              {pb.rows.map(([en,es],i)=>{
+                const vis=revealAll||revealed[i];
+                return(
+                  <div key={i} onClick={()=>setRevealed(r=>({...r,[i]:!r[i]}))} style={{...row,cursor:"pointer",flexDirection:"column",alignItems:"stretch",gap:2}}>
+                    <div style={{fontSize:"0.76rem",color:theme.text}}>{en}</div>
+                    <div style={{fontSize:"0.78rem",fontWeight:600,color:vis?amber:theme.muted,fontStyle:vis?"normal":"italic"}}>{vis?es:"tap to reveal"}</div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </>}
@@ -3179,7 +3380,7 @@ function App(){
             dailyUnlock:saved.dailyUnlock||DEFAULT_DATA.dailyUnlock,
             habits:migratedHabits,
           });
-          if(!hasPilots||newHabits.length>0||!saved.spanishTrack?.installed||removeAnki||fixTherapy||hadDuplicates){
+          if(!hasPilots||newHabits.length>0||!saved.spanishTrack?.installed||(saved.spanishTrack?.version||1)<SPANISH_TRACK.version||removeAnki||fixTherapy||hadDuplicates){
             await pwaStorage.set(STORAGE_KEY,JSON.stringify(finalData));
           }
           setData(finalData);
@@ -3276,16 +3477,16 @@ function App(){
     return ()=>clearTimeout(t);
   },[data?.events, data?.todos, data?.habits]);
 
-  // Spanish badges: record once, award XP, celebrate
-  // Spanish plan milestones: mark reached once
-  const claimMilestone=useCallback(b=>{
-    if(!b) return;
-    update(d=>{
-      const st=d.spanishTrack||{};
-      if(st.badges?.[b.id]) return d;
-      return {...d, spanishTrack:{...st, badges:{...(st.badges||{}), [b.id]:todayStr()}}};
-    });
-    setToast(b.icon+" "+b.name+" — milestone reached. ¡Eso!");
+  // Spanish plan: lesson counters and stage checkpoints
+  const spanishSetProgress=useCallback(patch=>{
+    update(d=>{ const st=d.spanishTrack||{}; return {...d, spanishTrack:{...st, progress:{...spanishProgress(st), ...patch}}}; });
+  },[update]);
+  const spanishPassCheckpoint=useCallback(fromStage=>{
+    update(d=>spanishProgress(d.spanishTrack).stage===fromStage ? spanishAdvanceStage(d) : d);
+    const stage=fromStage+1;
+    setToast(stage>SPANISH_TRACK.stages.length
+      ? "🏁 STAGE 5 CHECKPOINT PASSED. Pimsleur is DONE. Maintenance mode: Saturday roleplay + Sunday podcast. ¡Lo lograste!"
+      : "🧭 CHECKPOINT PASSED. Welcome to Stage "+stage+" — Pimsleur Level "+Math.min(stage,5)+". ¡Eso!");
   },[update]);
 
   if(loading||!data)return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0a0e1a",color:"#38bdf8",fontFamily:"system-ui"}}>Loading…</div>;
@@ -3352,6 +3553,12 @@ function App(){
           onSave={projects=>save({...safeD,projects})}
           onDeleteProject={id=>save({...safeD,projects:safeD.projects.filter(p=>p.id!==id)})}
           onMarkStepDone={(projId,stepId)=>{
+            const sp=safeD.projects.find(p=>p.id===projId), sstep=sp?.steps.find(s=>s.id===stepId);
+            if(sp?.track===SPANISH_TRACK.id && sstep?.stage){
+              if(sstep.stage===spanishProgress(safeD.spanishTrack).stage) spanishPassCheckpoint(sstep.stage);
+              else showToast("Pass the stages in order — you're on Stage "+spanishProgress(safeD.spanishTrack).stage+". Mark it in the Spanish card.");
+              return;
+            }
             save({...safeD,projects:safeD.projects.map(p=>p.id!==projId?p:{...p,lastProgressDate:todayStr(),steps:p.steps.map(s=>s.id===stepId?{...s,done:true}:s)})});
             showToast(pick(QUIPS.stepComplete));
           }}
@@ -3369,7 +3576,7 @@ function App(){
               save({...safeD,todos:safeD.todos.map(t=>t.id===id?{...t,completed:!t.completed}:t)});
               if(completing){showToast(pick(QUIPS.todoComplete));}
             }} onDelete={id=>save({...safeD,todos:safeD.todos.filter(t=>t.id!==id)})}/>
-        <SpanishPanel habits={safeD.habits} spanishTrack={safeD.spanishTrack} theme={theme} onClaimMilestone={claimMilestone}/>
+        <SpanishPanel habits={safeD.habits} spanishTrack={safeD.spanishTrack} theme={theme} onSetProgress={spanishSetProgress} onPassCheckpoint={spanishPassCheckpoint}/>
         <HabitsPanel habits={safeD.habits} theme={theme} startDate={safeD.settings?.trackingStartDate||"2026-09-01"} onSetGoals={updated=>save({...safeD,habits:updated})} onAdd={h=>save({...safeD,habits:[...safeD.habits,h]})} onToggleDay={(id,date)=>{
               const h=safeD.habits.find(h=>h.id===id);
               const wasOff=h&&!h.completions?.[date];
