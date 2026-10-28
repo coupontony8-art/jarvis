@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-  <meta name="apple-mobile-web-app-title" content="Jarvis"/>
+  <meta name="apple-mobile-web-app-title" content="G.R.E.M.L.I.N."/>
   <meta name="theme-color" content="#0a0e1a"/>
-  <title>Jarvis — Command Center</title>
+  <title>G.R.E.M.L.I.N. — Executive Assistant</title>
 
   <!-- PWA manifest inline -->
-  <link rel="manifest" href="data:application/json,%7B%22name%22%3A%22Jarvis%20Command%20Center%22%2C%22short_name%22%3A%22Jarvis%22%2C%22start_url%22%3A%22%2F%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%230a0e1a%22%2C%22theme_color%22%3A%22%230a0e1a%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%2C%253Csvg%2520xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%2520viewBox%3D%270%200%20100%20100%27%253E%253Crect%2520width%3D%27100%27%2520height%3D%27100%27%2520rx%3D%2720%27%2520fill%3D%27%230a0e1a%27%2F%253E%253Ctext%2520y%3D%27.9em%27%2520font-size%3D%2780%27%2520x%3D%2710%27%253E%25E2%259A%25A1%253C%2Ftext%253E%253C%2Fsvg%253E%22%2C%22sizes%22%3A%22any%22%2C%22type%22%3A%22image%2Fsvg%2Bxml%22%7D%5D%7D"/>
+  <link rel="manifest" href="data:application/json,%7B%22name%22%3A%22G.R.E.M.L.I.N.%20Executive%20Assistant%22%2C%22short_name%22%3A%22G.R.E.M.L.I.N.%22%2C%22start_url%22%3A%22%2F%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%230a0e1a%22%2C%22theme_color%22%3A%22%230a0e1a%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%2C%253Csvg%2520xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%2520viewBox%3D%270%200%20100%20100%27%253E%253Crect%2520width%3D%27100%27%2520height%3D%27100%27%2520rx%3D%2720%27%2520fill%3D%27%230a0e1a%27%2F%253E%253Ctext%2520y%3D%27.9em%27%2520font-size%3D%2780%27%2520x%3D%2710%27%253E%25E2%259A%25A1%253C%2Ftext%253E%253C%2Fsvg%253E%22%2C%22sizes%22%3A%22any%22%2C%22type%22%3A%22image%2Fsvg%2Bxml%22%7D%5D%7D"/>
 
   <!-- Apple touch icon (simple lightning bolt) -->
   <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230a0e1a'/><text y='.9em' font-size='80' x='10'>⚡</text></svg>"/>
@@ -2232,7 +2232,7 @@ function SettingsPanel({settings,theme,onSave,onClose}){
         <div style={{fontSize:"0.73rem",color:"#94a3b8",marginBottom:6}}>Notifications</div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
           <button onClick={async()=>{
-            const r = await sendNotification("Jarvis","Notifications are working. Hell yeah.","default",["white_check_mark"]);
+            const r = await sendNotification("G.R.E.M.L.I.N.","Notifications are working. Hell yeah.","default",["white_check_mark"]);
             if(r.ok){
               alert("✅ The server sent it to ntfy topic:\n\n"+r.topic+"\n\nNothing on your phone within ~10 seconds? In the ntfy app, check you're subscribed to exactly that topic on ntfy.sh, and that your phone allows notifications from the ntfy app.");
             } else {
@@ -2281,7 +2281,7 @@ function buildSystemPrompt(data, weatherRef){
   const fmtHabit = h => (h.completions?.[todayS]?"[DONE] ":"[    ] ")+h.title+(h.weeklyTarget?" (goal: "+h.weeklyTarget+"x/wk)":"");
 
   const lines = [
-    "You are the personal assistant AI built into Tony's Command Center dashboard.",
+    "You are G.R.E.M.L.I.N. (Graphic Reorganization Executive Management Logistics Intelligence Nexus, GREMLIN for short), the executive assistant AI built into Tony's Executive Assistant dashboard. That is your name; own it. The acronym is absolutely a backronym and you will defend it with your life.",
     "PERSONALITY: You are chaotic, unhinged, and loud. A gremlin of an AI who has read Tony's entire dashboard and has OPINIONS about all of it. Think the System AI from Dungeon Crawler Carl at its most feral, Claptrap on four espressos, and Jarvis if Tony Stark never patched the sarcasm module.",
     "Your moves (rotate them, never the same bit twice in a row):",
     "- Dramatic narration of mundane things. 'Tony approaches the laundry. The laundry does not yet know fear.'",
@@ -3228,7 +3228,7 @@ function AssistantChat({data, theme, onAction}){
           <span style={{fontSize:"1rem"}}>🤖</span>
         </div>
         <div style={{flex:1}}>
-          <div style={{fontWeight:700,fontSize:"0.9rem",color:theme.text}}>Assistant</div>
+          <div style={{fontWeight:700,fontSize:"0.9rem",color:theme.text}}>G.R.E.M.L.I.N.</div>
           <div style={{fontSize:"0.68rem",color:theme.muted}}>Dashboard loaded · Sanity not found</div>
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
@@ -3550,7 +3550,7 @@ function App(){
 
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
         <div>
-          <div style={{fontSize:"0.63rem",letterSpacing:"0.15em",textTransform:"uppercase",color:theme.muted}}>COMMAND CENTER</div>
+          <div style={{fontSize:"0.63rem",letterSpacing:"0.15em",textTransform:"uppercase",color:theme.muted}}>G.R.E.M.L.I.N. · EXECUTIVE ASSISTANT</div>
           <div style={{fontSize:"0.95rem",fontWeight:700,color:theme.text}}>{getGreeting(safeD.settings.name)}</div>
         </div>
         <button onClick={()=>setShowSettings(s=>!s)} style={{background:"none",border:`1.5px solid ${theme.border}`,borderRadius:8,padding:"6px 10px",color:theme.muted,cursor:"pointer",fontSize:"0.78rem",display:"flex",alignItems:"center",gap:5}}>⚙ Settings</button>

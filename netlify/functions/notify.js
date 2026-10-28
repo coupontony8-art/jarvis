@@ -37,10 +37,10 @@ exports.handler = async (event) => {
   try {
     body = JSON.parse(event.body);
   } catch {
-    body = { title: "Jarvis", message: "You have a reminder." };
+    body = { title: "G.R.E.M.L.I.N.", message: "You have a reminder." };
   }
 
-  const title = body.title || "Jarvis";
+  const title = body.title || "G.R.E.M.L.I.N.";
   const message = body.message || "Tap to open your dashboard.";
   const priority = body.priority || "default"; // min, low, default, high, urgent
   const tags = body.tags || ["bell"];

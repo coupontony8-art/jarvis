@@ -69,9 +69,9 @@ function tomorrowsEvents(record, tomorrow) {
 
 // Today's goals line(s) from the app's Daily Unlock snapshot
 function goalsText(record, today) {
-  if (!record) return "Today's goals: couldn't load. Open Jarvis to check.";
+  if (!record) return "Today's goals: couldn't load. Open GREMLIN to check.";
   const g = record.dailyGoals;
-  if (!g || g.date !== today) return "Today's goals: nothing checked off in Jarvis today.";
+  if (!g || g.date !== today) return "Today's goals: nothing checked off in GREMLIN today.";
   if (!g.total) return "Today's goals: none scheduled today.";
   if (g.done >= g.total) {
     return `Today's goals: ${g.done}/${g.total} done ✓` + (g.claimed ? ` · ${g.reward || "reward"} claimed` : ` · ${g.reward || "reward"} unlocked, go claim it`);
@@ -87,14 +87,14 @@ function buildMessage(now, record, today, tomorrowStr) {
   const date = now.toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "America/Los_Angeles" });
   const quips = [
     `Evening review, Tony. ${day}, ${date}. The habits are waiting. They're always waiting.`,
-    `${day} evening. Your dashboard has been staring at the door all day. Open Jarvis.`,
+    `${day} evening. Your dashboard has been staring at the door all day. Open GREMLIN.`,
     `End of day, ${day}. Log your habits before they file a complaint.`,
-    `${day} evening. The system would like a word. Several words. Open Jarvis.`,
+    `${day} evening. The system would like a word. Several words. Open GREMLIN.`,
     `Daily review. ${date}. Two minutes, then you may return to your life. Probably.`,
   ];
   const quip = quips[Math.floor(Math.random() * quips.length)];
   let tomorrow;
-  if (events === null) tomorrow = "Tomorrow: couldn't load your calendar. Open Jarvis to check.";
+  if (events === null) tomorrow = "Tomorrow: couldn't load your calendar. Open GREMLIN to check.";
   else if (!events.length) tomorrow = "Tomorrow: nothing scheduled.";
   else tomorrow = "Tomorrow:\n" + events.map(e => `• ${formatTime(e.time)} — ${e.title}`).join("\n");
   return `${goalsText(record, today)}\n\n${tomorrow}\n\n${quip}`;
@@ -110,7 +110,7 @@ async function eveningReview(now = new Date()) {
   }
   const record = await loadSynced();
   await sendNtfy({
-    title: "⚡ Jarvis — Evening Review",
+    title: "⚡ G.R.E.M.L.I.N. — Evening Review",
     message: buildMessage(now, record, pn.date, addDays(pn.date, 1)),
     tags: ["calendar", "bell"],
   });
