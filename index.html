@@ -524,17 +524,17 @@ function timeAgo(ts){ const d=Date.now()-ts; if(d<60000)return"just now"; if(d<3
 // ~35 min a day. Progress = lesson counters + stage checkpoints, no deadline.
 // daysOfWeek uses JS numbering: Sun=0 … Sat=6.
 const SPANISH_TRACK = {
-  id:"spanish-clinical", name:"Clinical Spanish", version:2,
+  id:"spanish-clinical", name:"Clinical Spanish", version:3, // v3: no reminders
   goal:"Comfortable clinical Spanish with families · no deadline, ~35 min/day",
   tools:["Pimsleur","Langua"], startDate:"2026-10-27",
   lessonsPerLevel:30, languaTotal:36,
   minimumWeek:{ pimsleur:3, langua:1 },
   habits:[
-    {id:"pimsleur-daily", kind:"pimsleur", title:"Pimsleur lesson + Voice Coach", daysOfWeek:[1,2,3,4,5], durationMin:35, reminderTime:"07:30",
+    {id:"pimsleur-daily", kind:"pimsleur", title:"Pimsleur lesson + Voice Coach", daysOfWeek:[1,2,3,4,5], durationMin:35, reminderTime:null,
       detail:"Lesson audio (30 min) + Voice Coach for that lesson (5 min). Answer every prompt out loud. ~80% on time → next lesson; otherwise repeat it tomorrow. Repeating is progress."},
-    {id:"sat-langua", kind:"langua", title:"Langua lesson + Pimsleur Flash Cards", daysOfWeek:[6], durationMin:35, reminderTime:"10:00",
+    {id:"sat-langua", kind:"langua", title:"Langua lesson + Pimsleur Flash Cards", daysOfWeek:[6], durationMin:35, reminderTime:null,
       detail:"Langua lesson (20 min) + Pimsleur Flash Cards + Quick Match for this week's lessons (15 min). Save any word you'd actually use with a family."},
-    {id:"sun-langua", kind:"langua", title:"Langua lesson + saved flashcards", daysOfWeek:[0], durationMin:30, reminderTime:"10:00",
+    {id:"sun-langua", kind:"langua", title:"Langua lesson + saved flashcards", daysOfWeek:[0], durationMin:30, reminderTime:null,
       detail:"Langua lesson (20 min) + your saved Langua flashcards, or one phrase-bank section (10 min). Say everything out loud."},
   ],
   stages:[
@@ -772,9 +772,8 @@ function spanishWeeksKept(habits){
   return {kept,full};
 }
 
-// Therapy moved to every other week starting 2026-10-27 (2:00 PM)
-const THERAPY_BIWEEKLY_FROM = "2026-10-27";
-const THERAPY_BIWEEKLY_DATES = new Set(["2026-10-27", "2026-11-10", "2026-11-24", "2026-12-08", "2026-12-22", "2027-01-05", "2027-01-19", "2027-02-02", "2027-02-16", "2027-03-02", "2027-03-16", "2027-03-30", "2027-04-13", "2027-04-27"]);
+// Therapy: every other week from 10/27, back to weekly (Tuesdays 2:00 PM) from 11/3
+const THERAPY_WEEKLY_FROM = "2026-11-03";
 
 const DEFAULT_DATA = {
   settings:{ name:"Tony", theme:"dark", accent:"#38bdf8", trackingStartDate:"2026-09-01" },
@@ -857,19 +856,32 @@ const DEFAULT_DATA = {
     {id:genId(),title:"Therapy",date:"2026-10-13",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
     {id:genId(),title:"Therapy",date:"2026-10-20",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
     {id:genId(),title:"Therapy",date:"2026-10-27",time:"14:00",category:"appointment",notes:"Every other week — 2:00 PM"},
-    {id:genId(),title:"Therapy",date:"2026-11-10",time:"14:00",category:"appointment",notes:"Every other week — 2:00 PM"},
-    {id:genId(),title:"Therapy",date:"2026-11-24",time:"14:00",category:"appointment",notes:"Every other week — 2:00 PM"},
-    {id:genId(),title:"Therapy",date:"2026-12-08",time:"14:00",category:"appointment",notes:"Every other week — 2:00 PM"},
-    {id:genId(),title:"Therapy",date:"2026-12-22",time:"14:00",category:"appointment",notes:"Every other week — 2:00 PM"},
-    {id:genId(),title:"Therapy",date:"2027-01-05",time:"14:00",category:"appointment",notes:"Every other week — 2:00 PM"},
-    {id:genId(),title:"Therapy",date:"2027-01-19",time:"14:00",category:"appointment",notes:"Every other week — 2:00 PM"},
-    {id:genId(),title:"Therapy",date:"2027-02-02",time:"14:00",category:"appointment",notes:"Every other week — 2:00 PM"},
-    {id:genId(),title:"Therapy",date:"2027-02-16",time:"14:00",category:"appointment",notes:"Every other week — 2:00 PM"},
-    {id:genId(),title:"Therapy",date:"2027-03-02",time:"14:00",category:"appointment",notes:"Every other week — 2:00 PM"},
-    {id:genId(),title:"Therapy",date:"2027-03-16",time:"14:00",category:"appointment",notes:"Every other week — 2:00 PM"},
-    {id:genId(),title:"Therapy",date:"2027-03-30",time:"14:00",category:"appointment",notes:"Every other week — 2:00 PM"},
-    {id:genId(),title:"Therapy",date:"2027-04-13",time:"14:00",category:"appointment",notes:"Every other week — 2:00 PM"},
-    {id:genId(),title:"Therapy",date:"2027-04-27",time:"14:00",category:"appointment",notes:"Every other week — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-11-03",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-11-10",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-11-17",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-11-24",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-12-01",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-12-08",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-12-15",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-12-22",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2026-12-29",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2027-01-05",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2027-01-12",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2027-01-19",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2027-01-26",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2027-02-02",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2027-02-09",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2027-02-16",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2027-02-23",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2027-03-02",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2027-03-09",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2027-03-16",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2027-03-23",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2027-03-30",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2027-04-06",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2027-04-13",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2027-04-20",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
+    {id:genId(),title:"Therapy",date:"2027-04-27",time:"14:00",category:"appointment",notes:"Weekly therapy — 2:00 PM"},
   ], todos:[], notes:[],
   habits:[
     {id:genId(),title:"Morning workout",  frequency:"daily", daysOfWeek:[0,1,2,3,4,5,6],completions:{},monthlyGoals:{},weeklyTarget:3},
@@ -2265,13 +2277,13 @@ function buildSystemPrompt(data, weatherRef){
     (()=>{ const th=trackHabits(data.habits); if(!th.length) return "";
       const wk=spanishWeekStatus(data.habits,getCurrentWeekKey()); const pim=th.find(h=>h.id==="pimsleur-daily");
       const pr=spanishProgress(data.spanishTrack), info=spanishStageInfo(pr.stage);
-      const todayList=th.filter(h=>isHabitScheduled(h,todayS)).map(h=>(h.completions?.[todayS]?"[DONE] ":"[    ] ")+h.title+" ("+h.durationMin+"m, "+formatTime(h.reminderTime)+")");
+      const todayList=th.filter(h=>isHabitScheduled(h,todayS)).map(h=>(h.completions?.[todayS]?"[DONE] ":"[    ] ")+h.title+" ("+h.durationMin+"m)");
       return "SPANISH PLAN (simple version; comfortable clinical Spanish with families, no deadline, ~35 min/day, never over 40; started "+formatDate(SPANISH_TRACK.startDate)+"): "
         +(info?"Stage "+pr.stage+"/5 — Pimsleur Level "+pr.pimsleurLevel+" Lesson "+pr.pimsleurLesson+"/"+SPANISH_TRACK.lessonsPerLevel+", Langua lesson "+Math.min(pr.languaLesson,SPANISH_TRACK.languaTotal)+"/"+SPANISH_TRACK.languaTotal+"; checkpoint to pass: "+info.checkpoint:"all 5 stages passed, maintenance mode (Sat roleplay + Sun podcast)")
         +"; today: "+(todayList.join(" | ")||"nothing scheduled")
         +"; this week "+wk.done+"/"+wk.total+(wk.fullKept?" (full week kept)":wk.minimumKept?" (minimum kept)":"")
         +"; bad-week minimum: 3 Pimsleur + 1 Langua; Pimsleur streak "+(pim?habitStreak(pim):0)
-        +". Rules: weekdays Pimsleur lesson audio + Voice Coach (7:30am), Sat Langua lesson + Pimsleur Flash Cards/Quick Match, Sun Langua lesson + saved flashcards or phrase bank (10am); speak out loud; ~80% on time → next lesson, else repeat; missed a day → don't double up. For consent, bad news or complex histories he should use a professional interpreter."; })(),
+        +". No reminders (he turned them off). Rules: weekdays Pimsleur lesson audio + Voice Coach, Sat Langua lesson + Pimsleur Flash Cards/Quick Match, Sun Langua lesson + saved flashcards or phrase bank; speak out loud; ~80% on time → next lesson, else repeat; missed a day → don't double up. For consent, bad news or complex histories he should use a professional interpreter."; })(),
     weatherRef?"WEATHER: "+weatherRef:"",
     "",
     "TONY CONTEXT: Pediatrician at Woodcreek (4 days/wk). Plays for the Pilots baseball team. Tuesday run club. Rock climbs, lifts. Learning Spanish. ADHD. DIY car soundproofing (2024 Civic Sport Touring). Fantasy football, gaming, Seinfeld, Dungeon Crawler Carl. University Place WA.",
@@ -2621,7 +2633,7 @@ function SpanishPanel({habits, spanishTrack, theme, onSetProgress, onPassCheckpo
                 <div key={h.id} style={{display:"flex",alignItems:"center",gap:8,fontSize:"0.78rem",color:theme.text,padding:"2px 0"}}>
                   <span style={{color:h.completions?.[today]?green:theme.muted}}>{h.completions?.[today]?"✓":"○"}</span>
                   <span style={{flex:1,textDecoration:h.completions?.[today]?"line-through":"none",opacity:h.completions?.[today]?0.6:1}}>{h.title}</span>
-                  <span style={{fontSize:"0.62rem",color:theme.muted}}>{h.durationMin?fmtMins(h.durationMin)+" · ":""}{formatTime(h.reminderTime)}</span>
+                  <span style={{fontSize:"0.62rem",color:theme.muted}}>{[h.durationMin&&fmtMins(h.durationMin),h.reminderTime&&formatTime(h.reminderTime)].filter(Boolean).join(" · ")}</span>
                 </div>
               ))}
             {todayItems.length>0&&<div style={{fontSize:"0.6rem",color:theme.muted,marginTop:3}}>Check these off in Daily Habits. Speak out loud every time.</div>}
@@ -3347,13 +3359,11 @@ function App(){
           const savedTitles=new Set(dedupedHabits.map(h=>normTitle(h.title)));
           const newHabits=DEFAULT_DATA.habits.filter(h=>!savedTitles.has(normTitle(h.title)));
 
-          // Migrate (once): therapy is now every other week from 10/27 — drop the old weekly
-          // future sessions not on the new schedule; past sessions stay as history
-          const fixTherapy=!saved.settings?.therapyBiweekly;
+          // Migrate (once): therapy is weekly again from 11/3 — missing Tuesdays come back
+          // via the default-event merge below; relabel the ones already there
+          const fixTherapy=!saved.settings?.therapyWeekly;
           if(fixTherapy){
-            saved.events=(saved.events||[])
-              .filter(e=>!(e.title==="Therapy"&&e.date>=THERAPY_BIWEEKLY_FROM&&!THERAPY_BIWEEKLY_DATES.has(e.date)))
-              .map(e=>e.title==="Therapy"&&THERAPY_BIWEEKLY_DATES.has(e.date)?{...e,notes:"Every other week — 2:00 PM"}:e);
+            saved.events=(saved.events||[]).map(e=>e.title==="Therapy"&&e.date>=THERAPY_WEEKLY_FROM?{...e,notes:"Weekly therapy — 2:00 PM"}:e);
           }
 
           // Migrate: Pilots schedule
@@ -3374,7 +3384,7 @@ function App(){
               p.title==="Learn Spanish"?{...p,title:"Spanish Practice"}:p
             ),
             rewards:{...(saved.rewards||DEFAULT_DATA.rewards), spendableXp:(saved.rewards?.spendableXp||saved.rewards?.xp||0)},
-            settings:{...(saved.settings||DEFAULT_DATA.settings), trackingStartDate:saved.settings?.trackingStartDate||"2026-09-01", ankiRemoved:true, therapyBiweekly:true},
+            settings:{...(saved.settings||DEFAULT_DATA.settings), trackingStartDate:saved.settings?.trackingStartDate||"2026-09-01", ankiRemoved:true, therapyBiweekly:true, therapyWeekly:true},
             rewardStore:saved.rewardStore||DEFAULT_DATA.rewardStore,
             goalRewards:saved.goalRewards||DEFAULT_DATA.goalRewards,
             dailyUnlock:saved.dailyUnlock||DEFAULT_DATA.dailyUnlock,
