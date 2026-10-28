@@ -41,19 +41,23 @@ exports.handler = async (event) => {
   ];
   const message = messages[Math.floor(Math.random() * messages.length)];
 
-  await fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
-    method: "POST",
-    headers: {
-      "Title": "🏈 Set Your Fantasy Lineup — Sunday",
-      "Priority": "high",
-      "Tags": "football,alarm_clock",
-      "Click": "https://sprightly-bublanina-852280.netlify.app",
-      "Content-Type": "text/plain",
-    },
-    body: message,
-  });
+  await sendNtfy({ title: "🏈 Set Your Fantasy Lineup — Sunday", message, priority: "high", tags: ["football", "alarm_clock"] });
 
   return { statusCode: 200, body: "Sent" };
 };
+
+
+// ntfy via JSON publishing: titles/messages can carry emoji. (Header-based
+// publishing crashed fetch, since HTTP headers can't hold non-Latin characters.)
+const NTFY_PRIORITY = { min: 1, low: 2, default: 3, high: 4, urgent: 5 };
+async function sendNtfy({ title, message, priority = "default", tags = ["bell"], click = "https://sprightly-bublanina-852280.netlify.app" }) {
+  const res = await fetch("https://ntfy.sh/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ topic: NTFY_TOPIC, title, message, priority: NTFY_PRIORITY[priority] || 3, tags, click }),
+  });
+  if (!res.ok) throw new Error(`ntfy ${res.status}: ${await res.text()}`);
+  return res;
+}
 
 exports._test = { pacificNow };

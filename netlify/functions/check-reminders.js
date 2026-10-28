@@ -41,18 +41,17 @@ function habitReminderDue(h, todayStr, nowMins, dow) {
   return since >= 0 && since < 30;
 }
 
-async function sendNtfy(title, message, priority = "default", tags = ["bell"]) {
-  await fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
+// ntfy via JSON publishing: titles/messages can carry emoji. (Header-based
+// publishing crashed fetch, since HTTP headers can't hold non-Latin characters.)
+const NTFY_PRIORITY = { min: 1, low: 2, default: 3, high: 4, urgent: 5 };
+async function sendNtfy({ title, message, priority = "default", tags = ["bell"], click = "https://sprightly-bublanina-852280.netlify.app" }) {
+  const res = await fetch("https://ntfy.sh/", {
     method: "POST",
-    headers: {
-      "Title": title,
-      "Priority": priority,
-      "Tags": tags.join(","),
-      "Click": SITE_URL,
-      "Content-Type": "text/plain",
-    },
-    body: message,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ topic: NTFY_TOPIC, title, message, priority: NTFY_PRIORITY[priority] || 3, tags, click }),
   });
+  if (!res.ok) throw new Error(`ntfy ${res.status}: ${await res.text()}`);
+  return res;
 }
 
 exports.handler = async (event) => {
@@ -74,7 +73,6 @@ exports.handler = async (event) => {
   }
 
   const events = data?.events || [];
-  const todos = data?.todos || [];
 
   // Current time in Pacific (handles daylight saving automatically)
   const { todayStr, nowMins, dow } = pacificNow(new Date());
@@ -112,20 +110,7 @@ exports.handler = async (event) => {
     }
   }
 
-  // Todos due today with a time: one alert 0–29 min before
-  for (const t of todos) {
-    if (!t.dueDate || t.dueDate !== todayStr || t.completed || !t.dueTime) continue;
-    const [th, tm] = t.dueTime.split(":").map(Number);
-    const diff = th * 60 + tm - nowMins;
-    if (inWindow(th * 60 + tm - slotMins, 0, 30)) {
-      notifications.push({
-        title: `📋 Due ${minsLabel(Math.max(diff, 0))}: ${t.title}`,
-        message: `"${t.title}" is due at ${formatTime(t.dueTime)}`,
-        priority: "high",
-        tags: ["pushpin"],
-      });
-    }
-  }
+  // (To-dos no longer get push reminders.)
 
   // Habit reminders (e.g. Spanish plan)
   const habits = data?.habits || [];
@@ -141,14 +126,13 @@ exports.handler = async (event) => {
   }
 
   // Fire all notifications
-  await Promise.allSettled(
-    notifications.map(n => sendNtfy(n.title, n.message, n.priority, n.tags))
-  );
+  const results = await Promise.allSettled(notifications.map(n => sendNtfy(n)));
+  results.forEach((r, i) => { if (r.status === "rejected") console.error("Push failed:", notifications[i].title, r.reason?.message); });
 
-  console.log(`Checked ${events.length} events, ${todos.length} todos, ${habits.length} habits. Sent ${notifications.length} notifications.`);
+  console.log(`Checked ${events.length} events, ${habits.length} habits. Sent ${results.filter(r => r.status === "fulfilled").length}/${notifications.length} notifications.`);
   return {
     statusCode: 200,
-    body: JSON.stringify({ checked: events.length + todos.length, sent: notifications.length }),
+    body: JSON.stringify({ checked: events.length + habits.length, sent: results.filter(r => r.status === "fulfilled").length }),
   };
 };
 

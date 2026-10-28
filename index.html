@@ -1093,16 +1093,6 @@ function Toast({message,accent,onDismiss,xp}){
 
 // ─── REMINDER ALERT ───────────────────────────────────────────────────────────
 function ReminderAlert({reminders,accent,onDismiss}){
-  // Fire ntfy notification for new reminders
-  useEffect(()=>{
-    reminders.forEach(r=>{
-      const key="ntfy_sent_"+r.id;
-      if(!sessionStorage.getItem(key)){
-        sessionStorage.setItem(key,"1");
-        sendNotification("⏰ "+r.title, r.time?"At "+r.time:"", "high", ["alarm_clock"]);
-      }
-    });
-  },[reminders]);
   if(!reminders.length)return null;
   return(
     <div style={{position:"fixed",top:16,right:16,zIndex:3000,display:"flex",flexDirection:"column",gap:8,maxWidth:300}}>
