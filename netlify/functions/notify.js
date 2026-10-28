@@ -1,6 +1,6 @@
 // Netlify function — sends a push notification via ntfy.sh
 // Called from the app (URL-callable). Must NOT have a schedule: scheduled
-// functions can't be invoked by URL. The 8pm check-in lives in evening-checkin.js.
+// functions can't be invoked by URL. The 8pm Evening Review lives in evening-checkin.js.
 
 const NTFY_TOPIC = process.env.NTFY_TOPIC || "tony-jarvis-2026-abc123";
 // ntfy via JSON publishing: titles/messages can carry emoji. (Header-based

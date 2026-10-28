@@ -83,7 +83,7 @@ exports.handler = async (event) => {
   const notifications = [];
 
 
-  // (Events no longer get pushes beforehand — the 8pm check-in lists tomorrow's timed events.)
+  // (Events no longer get pushes beforehand — the 8pm Evening Review lists tomorrow's timed events.)
   // (To-dos no longer get push reminders.)
 
   // Habit reminders (e.g. Spanish plan)

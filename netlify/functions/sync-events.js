@@ -39,6 +39,7 @@ exports.handler = async (event) => {
     events: payload.events || [],
     todos: payload.todos || [],
     habits: payload.habits || [],
+    dailyGoals: payload.dailyGoals || null,
     updatedAt: new Date().toISOString(),
   };
 
