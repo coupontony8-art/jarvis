@@ -1431,8 +1431,14 @@ function TodaySummary({events,todos,habits,projects,theme}){
 }
 
 // ─── CALENDAR PANEL ───────────────────────────────────────────────────────────
-function CalendarPanel({events,todos,theme}){
+function CalendarPanel({events,todos,theme,onAdd,onDelete}){
   const today=new Date();
+  const [showModal,setShowModal]=useState(false);
+  const [confirmDel,setConfirmDel]=useState(null);
+  const blankForm=d=>({title:"",date:d||todayStr(),time:"",category:"other",notes:""});
+  const [form,setForm]=useState(blankForm());
+  const openAdd=()=>{setForm(blankForm(selected));setShowModal(true);};
+  const saveEvent=()=>{if(!form.title.trim())return;onAdd({...form,id:genId(),title:form.title.trim()});setSelected(form.date);setShowModal(false);};
   const [viewYear,setViewYear]=useState(today.getFullYear());
   const [viewMonth,setViewMonth]=useState(today.getMonth());
   const [selected,setSelected]=useState(todayStr());
@@ -1451,6 +1457,7 @@ function CalendarPanel({events,todos,theme}){
     <div style={{background:theme.panel,border:`1px solid ${theme.border}`,borderRadius:10,padding:14}}>
       <SectionHeader title="Calendar" accent={theme.accent} action={
         <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <button onClick={openAdd} style={{background:theme.accent,border:"none",borderRadius:6,color:"#000",fontSize:"0.75rem",fontWeight:700,padding:"3px 9px",cursor:"pointer"}}>+ Add</button>
           <button onClick={prevMonth} style={{background:"none",border:`1px solid ${theme.border}`,borderRadius:6,color:theme.muted,cursor:"pointer",padding:"2px 8px",fontSize:"0.8rem"}}>‹</button>
           <span style={{fontSize:"0.78rem",fontWeight:700,color:theme.text,minWidth:106,textAlign:"center"}}>{MONTHS[viewMonth]} {viewYear}</span>
           <button onClick={nextMonth} style={{background:"none",border:`1px solid ${theme.border}`,borderRadius:6,color:theme.muted,cursor:"pointer",padding:"2px 8px",fontSize:"0.8rem"}}>›</button>
@@ -1481,9 +1488,12 @@ function CalendarPanel({events,todos,theme}){
                 <span>{CATEGORY_ICONS[ev.category]||"📌"}</span>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:"0.8rem",fontWeight:600,color:theme.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ev.title}</div>
-                  {ev.time&&<div style={{fontSize:"0.68rem",color:theme.muted}}>{formatTime(ev.time)}</div>}
+                  {(ev.time||ev.notes)&&<div style={{fontSize:"0.68rem",color:theme.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{[ev.time&&formatTime(ev.time),ev.notes].filter(Boolean).join(" · ")}</div>}
                 </div>
                 <span style={{fontSize:"0.62rem",padding:"1px 5px",borderRadius:4,background:`${CATEGORY_COLORS[ev.category]}22`,color:CATEGORY_COLORS[ev.category],textTransform:"capitalize",flexShrink:0}}>{ev.category}</span>
+                {confirmDel===ev.id
+                  ? <button onClick={()=>{onDelete(ev.id);setConfirmDel(null);}} style={{background:"#ef4444",border:"none",borderRadius:5,color:"#fff",cursor:"pointer",fontSize:"0.65rem",fontWeight:700,padding:"2px 6px",flexShrink:0}}>Delete</button>
+                  : <button onClick={()=>setConfirmDel(ev.id)} title="Delete event" style={{background:"none",border:"none",color:theme.muted,cursor:"pointer",fontSize:"0.8rem",opacity:0.5,flexShrink:0,padding:0}}>✕</button>}
               </div>
             ))}
             {selTodos.map(t=>(
@@ -1499,44 +1509,6 @@ function CalendarPanel({events,todos,theme}){
       {selected&&selEvs.length===0&&selTodos.length===0&&(
         <div style={{marginTop:8,borderTop:`1px solid ${theme.border}`,paddingTop:8,fontSize:"0.75rem",color:theme.muted,textAlign:"center"}}>Nothing on {formatDate(selected)}</div>
       )}
-      <div style={{marginTop:10,display:"flex",flexWrap:"wrap",gap:"5px 10px"}}>
-        {Object.entries(CATEGORY_COLORS).map(([k,c])=>(
-          <div key={k} style={{display:"flex",alignItems:"center",gap:4}}>
-            <div style={{width:7,height:7,borderRadius:"50%",background:c}}/>
-            <span style={{fontSize:"0.63rem",color:theme.muted,textTransform:"capitalize"}}>{k}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── EVENTS PANEL ─────────────────────────────────────────────────────────────
-function EventsPanel({events,theme,onAdd,onDelete}){
-  const [showModal,setShowModal]=useState(false);
-  const [form,setForm]=useState({title:"",date:todayStr(),time:"",category:"other",notes:""});
-  const upcoming=[...events].filter(e=>e.date>=todayStr()).sort((a,b)=>a.date.localeCompare(b.date)||(a.time||"").localeCompare(b.time||""));
-  const save=()=>{if(!form.title.trim())return;onAdd({...form,id:genId(),title:form.title.trim()});setForm({title:"",date:todayStr(),time:"",category:"other",notes:""});setShowModal(false);};
-  return(
-    <div style={{background:theme.panel,border:`1px solid ${theme.border}`,borderRadius:10,padding:14}}>
-      <SectionHeader title="Upcoming Events" accent={theme.accent} action={
-        <button onClick={()=>setShowModal(true)} style={{background:theme.accent,border:"none",borderRadius:6,color:"#000",fontSize:"0.75rem",fontWeight:700,padding:"4px 10px",cursor:"pointer"}}>+ Add</button>
-      }/>
-      {upcoming.length===0?<p style={{color:theme.muted,fontSize:"0.8rem",textAlign:"center",padding:"8px 0"}}>{QUIPS.emptyEvents}</p>:(
-        <div style={{display:"flex",flexDirection:"column",gap:5}}>
-          {upcoming.slice(0,8).map(ev=>(
-            <div key={ev.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 8px",background:theme.bg,borderRadius:7,borderLeft:`3px solid ${CATEGORY_COLORS[ev.category]||"#64748b"}`}}>
-              <span style={{fontSize:"0.9rem",flexShrink:0}}>{CATEGORY_ICONS[ev.category]||"📌"}</span>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:"0.85rem",fontWeight:600,color:theme.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ev.title}</div>
-                <div style={{fontSize:"0.7rem",color:theme.muted}}>{formatDate(ev.date)}{ev.time?` · ${formatTime(ev.time)}`:""}</div>
-              </div>
-              <span style={{fontSize:"0.63rem",padding:"2px 6px",borderRadius:4,background:`${CATEGORY_COLORS[ev.category]}22`,color:CATEGORY_COLORS[ev.category],textTransform:"capitalize",flexShrink:0}}>{ev.category}</span>
-              <button onClick={()=>onDelete(ev.id)} style={{background:"none",border:"none",color:theme.muted,cursor:"pointer",fontSize:"0.8rem",opacity:0.5,flexShrink:0}}>✕</button>
-            </div>
-          ))}
-        </div>
-      )}
       {showModal&&(
         <Modal title="Add Event" onClose={()=>setShowModal(false)} theme={theme}>
           <Inp label="Title" value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="e.g. Pilots game vs. Tigers"/>
@@ -1546,9 +1518,17 @@ function EventsPanel({events,theme,onAdd,onDelete}){
             {Object.keys(CATEGORY_COLORS).map(c=><option key={c} value={c}>{CATEGORY_ICONS[c]} {c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
           </Inp>
           <Inp label="Notes (optional)" value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} placeholder="Location, details…"/>
-          <button onClick={save} style={{width:"100%",background:theme.accent,border:"none",borderRadius:8,padding:"10px",color:"#000",fontWeight:700,cursor:"pointer",fontSize:"0.9rem",marginTop:4}}>Save Event</button>
+          <button onClick={saveEvent} style={{width:"100%",background:theme.accent,border:"none",borderRadius:8,padding:"10px",color:"#000",fontWeight:700,cursor:"pointer",fontSize:"0.9rem",marginTop:4}}>Save Event</button>
         </Modal>
       )}
+      <div style={{marginTop:10,display:"flex",flexWrap:"wrap",gap:"5px 10px"}}>
+        {Object.entries(CATEGORY_COLORS).map(([k,c])=>(
+          <div key={k} style={{display:"flex",alignItems:"center",gap:4}}>
+            <div style={{width:7,height:7,borderRadius:"50%",background:c}}/>
+            <span style={{fontSize:"0.63rem",color:theme.muted,textTransform:"capitalize"}}>{k}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -3291,7 +3271,8 @@ function App(){
           const hasPilots=(saved.events||[]).some(e=>e.title&&e.title.includes("Pilots"));
           // Merge any new DEFAULT events not already in saved (by title+date)
           const savedEventKeys=new Set((saved.events||[]).map(e=>e.title+"_"+e.date));
-          const newDefaultEvents=DEFAULT_DATA.events.filter(e=>!savedEventKeys.has(e.title+"_"+e.date));
+          const deletedEventKeys=new Set(saved.deletedEvents||[]); // events you deleted stay deleted
+          const newDefaultEvents=DEFAULT_DATA.events.filter(e=>!savedEventKeys.has(e.title+"_"+e.date)&&!deletedEventKeys.has(e.title+"_"+e.date));
           const mergedEvents=[...(saved.events||[]),...newDefaultEvents];
 
           // Ensure monthlyGoals on all habits
@@ -3476,7 +3457,11 @@ function App(){
         />
         {/* Reward Store and weekly/monthly meal rewards retired (Oct 2026) — Daily Unlock is the reward now. Data kept. */}
         <WeatherWidget theme={theme}/>
-        <CalendarPanel events={safeD.events} todos={safeD.todos} theme={theme}/>
+        <CalendarPanel events={safeD.events} todos={safeD.todos} theme={theme}
+          onAdd={ev=>save({...safeD,events:[...safeD.events,ev]})}
+          onDelete={id=>{const ev=safeD.events.find(e=>e.id===id);
+            save({...safeD,events:safeD.events.filter(e=>e.id!==id),
+              deletedEvents:ev?[...new Set([...(safeD.deletedEvents||[]),ev.title+"_"+ev.date])]:(safeD.deletedEvents||[])});}}/>
         <ProjectsPanel
           projects={safeD.projects} habits={safeD.habits} theme={theme}
           onSave={projects=>save({...safeD,projects})}
@@ -3498,7 +3483,6 @@ function App(){
           onUpdate={n=>save({...safeD,notes:safeD.notes.map(x=>x.id===n.id?n:x)})}
           onDelete={id=>save({...safeD,notes:safeD.notes.filter(n=>n.id!==id)})}
         />
-        <EventsPanel events={safeD.events} theme={theme} onAdd={ev=>{const updated={...safeD,events:[...safeD.events,ev]};save(updated);}} onDelete={id=>save({...safeD,events:safeD.events.filter(e=>e.id!==id)})}/>
         <TodoPanel todos={safeD.todos} theme={theme} onAdd={t=>{const updated={...safeD,todos:[...safeD.todos,t]};save(updated);}} onToggle={id=>{
               const t=safeD.todos.find(t=>t.id===id);
               const completing=t&&!t.completed;
