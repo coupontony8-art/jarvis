@@ -1035,7 +1035,6 @@ const DEFAULT_DATA = {
   ], todos:[], notes:[],
   habits:[
     {id:genId(),title:"Morning workout",  frequency:"daily", daysOfWeek:[0,1,2,3,4,5,6],completions:{},monthlyGoals:{},weeklyTarget:3},
-    {id:genId(),title:"Run club",         frequency:"weekly",daysOfWeek:[3],         completions:{},monthlyGoals:{}},
     {id:genId(),title:"Meal prep",        frequency:"weekly",daysOfWeek:[0],         completions:{},monthlyGoals:{}},
     {id:genId(),title:"Stretch",          frequency:"daily", daysOfWeek:[0,1,2,3,4,5,6],completions:{},monthlyGoals:{}},
     {id:genId(),title:"Meditation",       frequency:"daily", daysOfWeek:[0,1,2,3,4,5,6],completions:{},monthlyGoals:{}},
@@ -3436,9 +3435,11 @@ function App(){
 
           // Patch habits: rename Evening->Morning workout, remove Heat/sauna
           const removeAnki=!saved.settings?.ankiRemoved; // one-time removal; a new Anki habit later is left alone
+          const removeRunClub=!saved.settings?.runClubRemoved; // one-time removal; a new Run club habit later is left alone
           const patchedHabits=(saved.habits||[])
             .filter(h=>h.title!=="Heat/sauna")
             .filter(h=>!(removeAnki&&h.title==="Anki review"))
+            .filter(h=>!(removeRunClub&&normTitle(h.title)===normTitle("Run club")))
             .map(h=>{
               if(h.title==="Morning workout"||h.title==="Evening workout"){
                 return{...h,title:"Morning workout",frequency:"daily",daysOfWeek:[0,1,2,3,4,5,6],weeklyTarget:h.weeklyTarget||3,monthlyGoals:h.monthlyGoals||{}};
@@ -3479,13 +3480,13 @@ function App(){
               p.title==="Learn Spanish"?{...p,title:"Spanish Practice"}:p
             ).map(p=>saved.settings?.phthaloTheme?p:{...p,color:({"#38bdf8":"#52a873","#a78bfa":"#123524","#22d3ee":"#9fb07a","#818cf8":"#7fa86a","#ec4899":"#d9826a","#8b5cf6":"#c97a5a"})[String(p.color).toLowerCase()]||p.color}),
             rewards:{...(saved.rewards||DEFAULT_DATA.rewards), spendableXp:(saved.rewards?.spendableXp||saved.rewards?.xp||0)},
-            settings:{...(saved.settings||DEFAULT_DATA.settings), trackingStartDate:saved.settings?.trackingStartDate||"2026-09-01", ankiRemoved:true, therapyBiweekly:true, therapyWeekly:true, phthaloTheme:true, ...(saved.settings?.phthaloTheme?{}:{theme:"phthalo",accent:"#52a873"})},
+            settings:{...(saved.settings||DEFAULT_DATA.settings), trackingStartDate:saved.settings?.trackingStartDate||"2026-09-01", ankiRemoved:true, runClubRemoved:true, therapyBiweekly:true, therapyWeekly:true, phthaloTheme:true, ...(saved.settings?.phthaloTheme?{}:{theme:"phthalo",accent:"#52a873"})},
             rewardStore:saved.rewardStore||DEFAULT_DATA.rewardStore,
             goalRewards:saved.goalRewards||DEFAULT_DATA.goalRewards,
             dailyUnlock:saved.dailyUnlock||DEFAULT_DATA.dailyUnlock,
             habits:migratedHabits,
           });
-          if(!hasPilots||!saved.settings?.phthaloTheme||newHabits.length>0||!saved.spanishTrack?.installed||(saved.spanishTrack?.version||1)<SPANISH_TRACK.version||removeAnki||fixTherapy||hadDuplicates){
+          if(!hasPilots||!saved.settings?.phthaloTheme||newHabits.length>0||!saved.spanishTrack?.installed||(saved.spanishTrack?.version||1)<SPANISH_TRACK.version||removeAnki||removeRunClub||fixTherapy||hadDuplicates){
             await pwaStorage.set(STORAGE_KEY,JSON.stringify(finalData));
           }
           setData(finalData);
