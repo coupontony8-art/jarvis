@@ -1091,90 +1091,6 @@ function Toast({message,accent,onDismiss,xp}){
   );
 }
 
-// ─── REMINDER ALERT ───────────────────────────────────────────────────────────
-function ReminderAlert({reminders,accent,onDismiss}){
-  if(!reminders.length)return null;
-  return(
-    <div style={{position:"fixed",top:16,right:16,zIndex:3000,display:"flex",flexDirection:"column",gap:8,maxWidth:300}}>
-      {reminders.map(r=>(
-        <div key={r.id} style={{background:"#1e0a0a",border:"1.5px solid #ef4444",borderRadius:10,padding:"12px 14px",color:"#e2e8f0",boxShadow:"0 4px 20px rgba(239,68,68,0.3)",display:"flex",gap:10,alignItems:"flex-start"}}>
-          <span style={{fontSize:"1.1rem",flexShrink:0}}>🔔</span>
-          <div style={{flex:1}}>
-            <div style={{fontWeight:700,fontSize:"0.82rem",color:"#fca5a5",marginBottom:2}}>Reminder</div>
-            <div style={{fontSize:"0.8rem"}}>{r.title}</div>
-            {r.time&&<div style={{fontSize:"0.7rem",color:"#94a3b8",marginTop:2}}>{formatTime(r.time)}</div>}
-          </div>
-          <button onClick={()=>onDismiss(r.id)} style={{background:"none",border:"none",color:"#64748b",cursor:"pointer",padding:0,flexShrink:0}}>✕</button>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ─── REMINDER ENGINE ──────────────────────────────────────────────────────────
-function useReminderEngine(events,todos,projects,habits){
-  const [activeAlerts,setActiveAlerts]=useState([]);
-  // Dismissals persist for the rest of the day (survive closing/reopening the app)
-  const DISMISS_KEY="jarvis_dismissed_alerts";
-  const dismissedRef=useRef(null);
-  if(dismissedRef.current===null){
-    let ids=[];
-    try{ const v=JSON.parse(localStorage.getItem(DISMISS_KEY)||"null"); if(v&&v.date===todayStr()&&Array.isArray(v.ids)) ids=v.ids; }catch{}
-    dismissedRef.current=new Set(ids);
-  }
-  useEffect(()=>{
-    const check=()=>{
-      const now=new Date(),nowStr=localDateStr(now),nowH=now.getHours(),nowM=now.getMinutes(),alerts=[];
-      events.forEach(ev=>{
-        if(!ev.time||ev.date!==nowStr)return;
-        const[eh,em]=ev.time.split(":").map(Number),evMins=eh*60+em,nowMins=nowH*60+nowM,diff=evMins-nowMins;
-        if(diff>0&&diff<=30){const k=`event-${ev.id}-pre`;if(!dismissedRef.current.has(k))alerts.push({id:k,title:`${ev.title} in ${diff} min`,time:ev.time});}
-        if(diff===0){const k=`event-${ev.id}-now`;if(!dismissedRef.current.has(k))alerts.push({id:k,title:`Starting now: ${ev.title}`,time:ev.time});}
-      });
-      todos.filter(t=>!t.completed).forEach(t=>{
-        if(!t.dueDate||t.dueDate!==nowStr)return;
-        const[ah,am]=t.dueTime?t.dueTime.split(":").map(Number):[9,0];
-        if(nowH===ah&&nowM===am){const k=`todo-${t.id}-due`;if(!dismissedRef.current.has(k))alerts.push({id:k,title:`Due today: ${t.title}`,time:t.dueTime||""});}
-      });
-      // Habit reminders: show from reminder time until done (or dismissed), within 90 min
-      (habits||[]).forEach(h=>{
-        if(!h.reminderTime||!isHabitScheduled(h,nowStr)||h.completions?.[nowStr])return;
-        const[rh,rm]=h.reminderTime.split(":").map(Number),since=(nowH*60+nowM)-(rh*60+rm);
-        if(since>=0&&since<=90){
-          const k=`habit-${h.id}-${nowStr}`;
-          if(!dismissedRef.current.has(k))alerts.push({id:k,title:`${h.track==="spanish-clinical"?"🇪🇸 ":""}${h.title}${h.durationMin?" · "+fmtMins(h.durationMin):""} — ${(h.detail||"").split(/(?<=\.)\s/)[0]}`,time:h.reminderTime});
-        }
-      });
-      // Project nudges
-      (projects||[]).filter(p=>p.status==="active"&&p.nudgeDays).forEach(p=>{
-        if(projectIdle(p,habits).overdue){
-          const k=`nudge-${p.id}-${nowStr}`;
-          if(!dismissedRef.current.has(k)){
-            alerts.push({id:k,title:nudgeMessage(p,habits),time:"",type:"nudge"});
-          }
-        }
-      });
-      const liveKeys=new Set(alerts.filter(a=>a.id.startsWith("habit-")||a.id.startsWith("nudge-")).map(a=>a.id));
-      setActiveAlerts(prev=>{
-        const kept=prev.filter(a=>!(a.id.startsWith("habit-")||a.id.startsWith("nudge-"))||liveKeys.has(a.id)); // drop reminders for habits/projects now handled
-        const ids=new Set(kept.map(a=>a.id));const nn=alerts.filter(a=>!ids.has(a.id));
-        return (nn.length||kept.length!==prev.length)?[...kept,...nn]:prev;
-      });
-    };
-    check();const iv=setInterval(check,30000);return()=>clearInterval(iv);
-  },[events,todos,habits,projects]);
-  const dismiss=id=>{
-    dismissedRef.current.add(id);
-    try{
-      const today=todayStr();
-      const ids=[...dismissedRef.current].filter(k=>k.includes(today)||!/\d{4}-\d{2}-\d{2}/.test(k));
-      localStorage.setItem(DISMISS_KEY, JSON.stringify({date:today, ids}));
-    }catch{}
-    setActiveAlerts(prev=>prev.filter(a=>a.id!==id));
-  };
-  return{activeAlerts,dismiss};
-}
-
 // ─── WEATHER LOCATION ─────────────────────────────────────────────────────────
 // Weather uses a saved location so the app never has to ask for GPS on open.
 // Default is home (University Place, WA); the 📍 button updates it on demand.
@@ -3483,7 +3399,6 @@ function App(){
     setInput("");
   };
 
-  const {activeAlerts,dismiss}=useReminderEngine(data?.events||[],data?.todos||[],data?.projects||[],data?.habits||[]);
 
   // Keep the server's reminder copy current: sync a few seconds after events/todos/habits change
   useEffect(()=>{
@@ -3512,7 +3427,6 @@ function App(){
 
   return(
     <div style={{minHeight:"100vh",background:theme.bg,color:theme.text,fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",padding:"12px 16px",maxWidth:680,margin:"0 auto",boxSizing:"border-box"}}>
-      <ReminderAlert reminders={activeAlerts} accent={theme.accent} onDismiss={dismiss}/>
       {goalCelebration&&<GoalRewardCelebration type={goalCelebration.type} restaurant={goalCelebration.restaurant} theme={theme} accent={theme.accent} onClose={()=>setGoalCelebration(null)}/>}
       {showMonthlyPrompt&&(
         <MonthlyReviewModal habits={safeD.habits} theme={theme} startDate={safeD.settings?.trackingStartDate||"2026-09-01"}
