@@ -315,16 +315,32 @@ function daysSinceLocal(dateStr){
   return Math.round((today-then)/86400000);
 }
 
+// Habits that count as progress on a project (e.g. Spanish track habits → Spanish project)
+function linkedHabits(p, habits){
+  if(!habits) return [];
+  const track = p.track || (/spanish/i.test(p.title||"") ? "spanish-clinical" : null);
+  return track ? habits.filter(h=>h.track===track) : [];
+}
+function lastHabitActivity(p, habits){
+  const today=todayStr(); let last=null;
+  linkedHabits(p, habits).forEach(h=>Object.keys(h.completions||{}).forEach(d=>{
+    if(h.completions[d] && d<=today && (!last || d>last)) last=d;
+  }));
+  return last;
+}
+
 // How long a project has sat idle, and whether it's ever been started
-function projectIdle(p){
-  const started=!!p.lastProgressDate || (p.steps||[]).some(s=>s.done);
-  const ref=p.lastProgressDate || p.createdAt || null;
+function projectIdle(p, habits){
+  const habitDate=lastHabitActivity(p, habits);
+  const started=!!p.lastProgressDate || !!habitDate || (p.steps||[]).some(s=>s.done);
+  const progress=[p.lastProgressDate, habitDate].filter(Boolean).sort().pop() || null;
+  const ref=progress || p.createdAt || null;
   const days=daysSinceLocal(ref);
   return { started, days, overdue: !!p.nudgeDays && (days===null || days>=p.nudgeDays) };
 }
 
-function nudgeMessage(p){
-  const {started, days}=projectIdle(p);
+function nudgeMessage(p, habits){
+  const {started, days}=projectIdle(p, habits);
   const seed=p.id+todayStr();
   if(!started) return fillQuip(stablePick(QUIPS.nudgeNotStarted, seed), {project:p.title});
   const pool = days===null ? QUIPS.nudge.filter(q=>!q.includes("{days}")) : QUIPS.nudge;
@@ -965,7 +981,14 @@ function ReminderAlert({reminders,accent,onDismiss}){
 // ─── REMINDER ENGINE ──────────────────────────────────────────────────────────
 function useReminderEngine(events,todos,projects,habits){
   const [activeAlerts,setActiveAlerts]=useState([]);
-  const dismissedRef=useRef(new Set());
+  // Dismissals persist for the rest of the day (survive closing/reopening the app)
+  const DISMISS_KEY="jarvis_dismissed_alerts";
+  const dismissedRef=useRef(null);
+  if(dismissedRef.current===null){
+    let ids=[];
+    try{ const v=JSON.parse(localStorage.getItem(DISMISS_KEY)||"null"); if(v&&v.date===todayStr()&&Array.isArray(v.ids)) ids=v.ids; }catch{}
+    dismissedRef.current=new Set(ids);
+  }
   useEffect(()=>{
     const check=()=>{
       const now=new Date(),nowStr=localDateStr(now),nowH=now.getHours(),nowM=now.getMinutes(),alerts=[];
@@ -991,23 +1014,31 @@ function useReminderEngine(events,todos,projects,habits){
       });
       // Project nudges
       (projects||[]).filter(p=>p.status==="active"&&p.nudgeDays).forEach(p=>{
-        if(projectIdle(p).overdue){
+        if(projectIdle(p,habits).overdue){
           const k=`nudge-${p.id}-${nowStr}`;
           if(!dismissedRef.current.has(k)){
-            alerts.push({id:k,title:nudgeMessage(p),time:"",type:"nudge"});
+            alerts.push({id:k,title:nudgeMessage(p,habits),time:"",type:"nudge"});
           }
         }
       });
-      const liveHabitKeys=new Set(alerts.filter(a=>a.id.startsWith("habit-")).map(a=>a.id));
+      const liveKeys=new Set(alerts.filter(a=>a.id.startsWith("habit-")||a.id.startsWith("nudge-")).map(a=>a.id));
       setActiveAlerts(prev=>{
-        const kept=prev.filter(a=>!a.id.startsWith("habit-")||liveHabitKeys.has(a.id)); // drop reminders for habits now done
+        const kept=prev.filter(a=>!(a.id.startsWith("habit-")||a.id.startsWith("nudge-"))||liveKeys.has(a.id)); // drop reminders for habits/projects now handled
         const ids=new Set(kept.map(a=>a.id));const nn=alerts.filter(a=>!ids.has(a.id));
         return (nn.length||kept.length!==prev.length)?[...kept,...nn]:prev;
       });
     };
     check();const iv=setInterval(check,30000);return()=>clearInterval(iv);
-  },[events,todos,habits]);
-  const dismiss=id=>{dismissedRef.current.add(id);setActiveAlerts(prev=>prev.filter(a=>a.id!==id));};
+  },[events,todos,habits,projects]);
+  const dismiss=id=>{
+    dismissedRef.current.add(id);
+    try{
+      const today=todayStr();
+      const ids=[...dismissedRef.current].filter(k=>k.includes(today)||!/\d{4}-\d{2}-\d{2}/.test(k));
+      localStorage.setItem(DISMISS_KEY, JSON.stringify({date:today, ids}));
+    }catch{}
+    setActiveAlerts(prev=>prev.filter(a=>a.id!==id));
+  };
   return{activeAlerts,dismiss};
 }
 
@@ -1235,7 +1266,7 @@ function TodaySummary({events,todos,habits,projects,theme}){
   // Project nudges for Today view
   const nudgeProjects=(projects||[]).filter(p=>{
     if(p.status!=="active"||!p.nudgeDays)return false;
-    return projectIdle(p).overdue;
+    return projectIdle(p,habits).overdue;
   });
 
   const isEmpty=todayEvents.length===0&&urgentTodos.length===0&&todayHabits.length===0&&nudgeProjects.length===0;
@@ -1314,7 +1345,7 @@ function TodaySummary({events,todos,habits,projects,theme}){
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:"0.82rem",fontWeight:600,color:theme.text}}>{p.title}</div>
                         <div style={{fontSize:"0.7rem",color:theme.muted}}>
-                          {nudgeMessage(p)}
+                          {nudgeMessage(p,habits)}
                         </div>
                       </div>
                     </div>
